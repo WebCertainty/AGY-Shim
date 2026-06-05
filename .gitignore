@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+*.log
+out.txt
+AGENTS.md
+archive/
+
+# Local AI workspace memory and runtime state
+.clairvoyance/
+.Clairvoyance/
+.gemini/

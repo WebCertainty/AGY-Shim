@@ -1,0 +1,77 @@
+# Architecture
+
+## Purpose
+
+AGY-Shim translates ACP JSON-RPC messages received over standard input into
+Antigravity CLI invocations and translates Antigravity output back into ACP
+session updates.
+
+The core protocol bridge is intended to be host-independent. The executable
+wrappers and provider identities are a separate compatibility layer created
+for Clairvoyance discovery. Keeping those concerns separate should allow
+future ACP hosts to invoke the core bridge directly or through their own
+adapter.
+
+## Components
+
+| Component | Responsibility |
+| --- | --- |
+| `bin/*.cmd` wrappers | Present compatibility executable names and provider versions |
+| `src/agy_shim/main.py` | ACP framing, dispatch, sessions, subprocesses, and streaming |
+| `agy.exe` | Executes prompts and maintains Antigravity conversations |
+| Conversation SQLite DB | Supplies incremental response records |
+| Session state | Maps ACP session IDs to Antigravity conversation IDs |
+
+## Request Flow
+
+1. The host starts a provider wrapper from `bin/`.
+2. The wrapper starts `src/agy_shim/main.py` with a provider identity.
+3. The host sends ACP JSON-RPC requests over standard input.
+4. The shim creates or restores session state.
+5. For a prompt, the shim starts `agy.exe` for the active workspace.
+6. The shim reads response updates from Antigravity's conversation database.
+7. Updates are emitted as ACP `session/update` notifications.
+8. The shim emits the final JSON-RPC response and persists session progress.
+
+## Protocol Surface
+
+The intended methods are:
+
+- `initialize`
+- `session/new`
+- `session/load`
+- `session/prompt`
+- `session/cancel`
+- `session/close`
+
+The implementation accepts LSP-style `Content-Length` framing and
+newline-delimited JSON. The exact ACP version and compatibility contract must
+be confirmed with each target host before claiming support.
+
+Current interoperability evidence covers a simulated ACP client shaped around
+Clairvoyance and manual use with Clairvoyance. It does not establish universal
+ACP compatibility. A new host requires tests for capability negotiation,
+framing, session lifecycle, streaming, cancellation, errors, and concurrency.
+
+## External Coupling
+
+Incremental streaming currently depends on undocumented Antigravity details:
+
+- conversation database location;
+- SQLite table and column names;
+- step type values;
+- protobuf field numbers and encoding;
+- CLI arguments and exit behavior.
+
+Changes to Antigravity may therefore break streaming or session continuity
+without changing AGY-Shim.
+
+## Unresolved Decisions
+
+- Whether provider masquerading is acceptable for long-term distribution.
+- Whether to expose a provider-neutral launcher for ACP hosts that do not use
+  Clairvoyance-style provider discovery.
+- Whether the shim should be packaged as a dedicated executable.
+- Whether Antigravity can expose a supported JSON streaming interface.
+- Whether sessions should be workspace-local, user-local, or host-managed.
+- What concurrency model is required by each supported ACP host.
