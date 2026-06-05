@@ -1,6 +1,8 @@
 # End-to-End Testing Methodology & Evidence
 
-This document outlines the testing strategy, design of the mock execution environment, and the actual test evidence for the **AGY-Shim** tool in `D:\CODE-REPO\Tools\AGY-Shim`.
+This document outlines the testing strategy, design of the mock execution
+environment, and the test evidence for AGY-Shim. Repository paths are relative
+to the checkout root unless stated otherwise.
 
 ---
 
@@ -13,6 +15,9 @@ Relying on live cloud model APIs for automated E2E tests introduces flakiness (d
    - **Newline-Delimited Raw Mode:** Standard line-based JSON-RPC messaging.
    - **LSP Content-Length Mode:** Header-based framing (`Content-Length: ...\r\n\r\n{...}`) matching the LSP standard.
 3. **Local Mock Agent Fixture:** Before executing the shim, the test runner sets the `AGY_PATH` environment variable to point to [mock_agy.cmd](../tests/fixtures/mock_agy.cmd). This causes the shim to spawn [mock_agy.py](../tests/fixtures/mock_agy.py) instead of the real `agy.exe`, enabling offline, deterministic verification of SQLite database parsing.
+4. **Isolated User Profile:** Each test run assigns the shim and mock agent a
+   temporary `USERPROFILE`, preventing session state and conversation fixtures
+   from being written to the developer's real `.gemini` directory.
 
 These tests validate the bridge behavior expected by Clairvoyance; they are
 not a general ACP conformance suite. Compatibility with another ACP host must

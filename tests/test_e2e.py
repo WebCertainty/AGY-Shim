@@ -12,6 +12,7 @@ import sys
 import os
 import time
 import tempfile
+from pathlib import Path
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TESTS_DIR)
@@ -26,10 +27,21 @@ def run_test_with_framing(use_lsp=False):
     log(f"Starting E2E Shim Test (use_lsp={use_lsp})")
     log(f"==================================================")
     
-    log_dir = tempfile.TemporaryDirectory()
-    log_path = os.path.join(log_dir.name, "runtime", "logs", "shim.log")
+    runtime_dir = tempfile.TemporaryDirectory()
+    log_path = os.path.join(runtime_dir.name, "logs", "shim.log")
+    profile_dir = os.path.join(runtime_dir.name, "profile")
+    workspace_dir = os.path.join(runtime_dir.name, "workspace")
+    os.makedirs(profile_dir)
+    os.makedirs(workspace_dir)
+    private_path_sentinel = os.path.join(
+        os.path.abspath(os.sep),
+        "Users",
+        "Sensitive User",
+        "private.txt",
+    )
     shim_env = os.environ.copy()
     shim_env["AGY_SHIM_LOG_FILE"] = log_path
+    shim_env["USERPROFILE"] = profile_dir
     proc = subprocess.Popen(
         [sys.executable, SHIM_FILE],
         stdin=subprocess.PIPE,
@@ -86,7 +98,8 @@ def run_test_with_framing(use_lsp=False):
             "method": "initialize",
             "params": {
                 "protocolVersion": 1,
-                "clientInfo": {"name": "test-runner", "version": "1.0.0"}
+                "clientInfo": {"name": "test-runner", "version": "1.0.0"},
+                "rootUri": Path(workspace_dir).as_uri(),
             }
         }
         send_req(init_req)
@@ -126,7 +139,7 @@ def run_test_with_framing(use_lsp=False):
                         "text": (
                             "Remember this word: ORANGE_BANANA. Reply with only: OK. "
                             "Privacy sentinel: DO_NOT_LOG_THIS_SECRET. "
-                            "Private path: C:\\Users\\Sensitive User\\private.txt"
+                            f"Private path: {private_path_sentinel}"
                         ),
                     }
                 ]
@@ -205,11 +218,18 @@ def run_test_with_framing(use_lsp=False):
     with open(log_path, "r", encoding="utf-8") as f:
         shim_log = f.read()
     assert "DO_NOT_LOG_THIS_SECRET" not in shim_log, "Prompt content leaked to shim log"
-    assert "Sensitive User" not in shim_log, "Personal path leaked to shim log"
+    assert private_path_sentinel not in shim_log, "Personal path leaked to shim log"
     assert PROJECT_ROOT not in shim_log, "Project path leaked to shim log"
     assert session_id not in shim_log, "Raw session ID leaked to shim log"
     assert "subprocess_starting" in shim_log, "Expected sanitized lifecycle event"
-    log_dir.cleanup()
+    workspace_state = os.path.join(
+        workspace_dir,
+        ".gemini",
+        "agy-acp",
+        "sessions.json",
+    )
+    assert os.path.exists(workspace_state), "Workspace URI was not used for session state"
+    runtime_dir.cleanup()
     log("Privacy-safe logging test passed.")
         
     log("All tests passed successfully for this framing mode!")

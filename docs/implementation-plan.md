@@ -34,7 +34,7 @@ When Clairvoyance scans path binaries using `<provider> --version`, the shim int
 
 ## Core Components
 
-The project is located in `D:\CODE-REPO\Tools\AGY-Shim`.
+All paths below are relative to the repository root.
 
 ### 1. Unified Python Shim ([main.py](../src/agy_shim/main.py))
 A Python script that:

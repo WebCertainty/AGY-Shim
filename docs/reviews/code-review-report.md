@@ -86,7 +86,8 @@ During [handle_prompt](../../src/agy_shim/main.py#L391), a thread pool handles:
 * **Resolution:** **[ADDRESSED]** Modified `handle_prompt()` to check `proc.returncode`. If the return code is non-zero, it returns a standard JSON-RPC protocol error response (`code: -32000`) describing the exit status.
 
 ### B. Hardcoded User Profile Path
-* **Review Comment:** The fallback path hardcodes the username `eflyers` (e.g. `C:\Users\eflyers\AppData\Local\agy\bin\agy.exe`).
+* **Review Comment:** The fallback path hardcoded a local username instead of
+  resolving the executable from `%LOCALAPPDATA%` or `%USERPROFILE%`.
 * **Resolution:** **[ADDRESSED]** Refactored `find_agy_path()` to dynamically query `%LOCALAPPDATA%` environment variables first, falling back to `%USERPROFILE%` / `~`. The hardcoded username is completely removed.
 
 ### C. Exception-Safe File Locking
@@ -132,7 +133,11 @@ The shim is spawned directly by the Clairvoyance host app and inherits its envir
 Through the ACP initialization, the shim receives the active workspace directory (`cwd`) and applies it to `agy.exe` via `--add-dir`. This ensures that all file operations, searches, and tests run relative to the workspace, avoiding accidental system-wide side effects.
 
 ### File-Backed Artifact Paths
-The agent can interact with the collaborative Clairvoyance system by reading/writing to the standard storage folders (relative to `%APPDATA%\clairvoyance\`, or `/mnt/c/Users/eflyers/AppData/Roaming/clairvoyance/` on WSL):
+The agent can interact with the collaborative Clairvoyance system by
+reading/writing to the standard storage folders relative to
+`%APPDATA%\clairvoyance\` on Windows. A WSL environment should resolve the
+equivalent mounted Windows profile dynamically rather than embedding a
+username:
 * **Notes:** `/notes/`
 * **Reports:** `/docs/reports/`
 * **Canvases:** `/canvases/`

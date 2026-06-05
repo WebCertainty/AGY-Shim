@@ -17,8 +17,10 @@ import threading
 import datetime
 import contextlib
 import urllib.parse
+import urllib.request
 import hashlib
 import re
+from pathlib import Path
 
 try:
     import msvcrt
@@ -228,26 +230,26 @@ def extract_workspace_from_initialize(params):
         if os.path.isdir(root_path):
             return root_path
             
-    root_uri = params.get("rootUri")
-    if root_uri and root_uri.startswith("file://"):
-        # Strip file:// or file:///
-        raw_path = root_uri[7:]
-        if raw_path.startswith("/"):
-            raw_path = raw_path[1:]
-        path = urllib.parse.unquote(raw_path).replace("/", "\\")
-        if os.path.isdir(path):
-            return path
+    def file_uri_to_path(uri):
+        if not uri:
+            return None
+        parsed = urllib.parse.urlparse(uri)
+        if parsed.scheme != "file":
+            return None
+        path = urllib.request.url2pathname(parsed.path)
+        if parsed.netloc and parsed.netloc.lower() != "localhost":
+            path = f"//{parsed.netloc}{path}"
+        return os.path.abspath(path)
+
+    root_uri_path = file_uri_to_path(params.get("rootUri"))
+    if root_uri_path and os.path.isdir(root_uri_path):
+        return root_uri_path
             
     folders = params.get("workspaceFolders")
     if folders and isinstance(folders, list) and len(folders) > 0:
-        uri = folders[0].get("uri")
-        if uri and uri.startswith("file://"):
-            raw_path = uri[7:]
-            if raw_path.startswith("/"):
-                raw_path = raw_path[1:]
-            path = urllib.parse.unquote(raw_path).replace("/", "\\")
-            if os.path.isdir(path):
-                return path
+        folder_path = file_uri_to_path(folders[0].get("uri"))
+        if folder_path and os.path.isdir(folder_path):
+            return folder_path
                 
     return None
 
@@ -306,8 +308,7 @@ def read_response_from_db(conversations_dir, conversation_id, after_step_idx):
         return None
     conn = None
     try:
-        abs_path = os.path.abspath(db_path).replace("\\", "/")
-        db_uri = f"file:///{abs_path}?mode=ro"
+        db_uri = f"{Path(db_path).resolve().as_uri()}?mode=ro"
         conn = sqlite3.connect(db_uri, uri=True)
         cursor = conn.cursor()
         
