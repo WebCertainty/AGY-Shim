@@ -219,11 +219,7 @@ The live test invokes the installed Antigravity agent and may consume model
 quota, modify its conversation store, and exercise autonomous permissions.
 Run it only in an appropriate test workspace.
 
-### IMPORTANT — Setup script (read before running)
-
-> **WARNING:** A PowerShell helper script is available at scripts/setup_agy_shim.ps1 to clone/update the repository, configure session environment variables (it prompts to enable AGY_SHIM_ALLOW_BYPASS), and perform basic verification. **THIS SCRIPT HAS NOT BEEN UNIVERSALLY TESTED.**
->
-> Use ONLY in isolated test VMs or ephemeral accounts. Do NOT enable AGY_SHIM_ALLOW_BYPASS on production or sensitive machines. Inspect the script before running; verify the agy.exe path and that prepending the repo's bin to PATH is acceptable in your environment.
+See [scripts/setup_agy_shim.ps1](scripts/setup_agy_shim.ps1) for the helper script and verification steps.
 
 
 See [docs/testing.md](docs/testing.md) for the intended verification matrix.
