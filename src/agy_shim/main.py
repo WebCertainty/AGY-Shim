@@ -17,6 +17,8 @@ import threading
 import datetime
 import contextlib
 import urllib.parse
+import hashlib
+import re
 
 try:
     import msvcrt
@@ -26,15 +28,63 @@ except ImportError:
 # Keep runtime logs at the repository root when running from a checkout.
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(PACKAGE_DIR))
-LOG_FILE = os.path.join(PROJECT_ROOT, "gemini_shim.log")
+LOG_FILE = os.environ.get(
+    "AGY_SHIM_LOG_FILE",
+    os.path.join(PROJECT_ROOT, "gemini_shim.log"),
+)
 
 # Global stdout lock to prevent interleaved concurrent prints
 stdout_lock = threading.Lock()
 log_lock = threading.Lock()
 
-def log(msg):
+def opaque_id(value):
+    if not value:
+        return "none"
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:12]
+
+
+def error_category(exc):
+    return type(exc).__name__
+
+
+def log_event(event, **fields):
+    """Write a privacy-safe lifecycle event.
+
+    Callers must pass only bounded metadata such as counts, exit codes, method
+    names, and already-hashed identifiers. Prompts, paths, command lines,
+    subprocess output, and exception messages are intentionally excluded.
+    """
     try:
         timestamp = datetime.datetime.now().isoformat()
+        safe_event = re.sub(r"[^a-z0-9_.-]", "_", str(event).lower())[:64]
+        safe_fields = []
+        safe_methods = {
+            "initialize",
+            "session/cancel",
+            "session/load",
+            "session/new",
+            "session/prompt",
+            "session/set_config_option",
+            "session/set_model",
+            "shutdown",
+        }
+        safe_string_fields = {"conversation", "error", "method", "session"}
+        for key, value in sorted(fields.items()):
+            safe_key = re.sub(r"[^a-z0-9_]", "_", str(key).lower())[:32]
+            if isinstance(value, bool):
+                safe_value = str(value).lower()
+            elif isinstance(value, (int, float)):
+                safe_value = str(value)
+            elif value is None:
+                safe_value = "none"
+            elif safe_key not in safe_string_fields:
+                safe_value = "redacted"
+            elif safe_key == "method":
+                safe_value = value if value in safe_methods else "unknown"
+            else:
+                safe_value = re.sub(r"[^A-Za-z0-9_.:/-]", "_", str(value))[:80]
+            safe_fields.append(f"{safe_key}={safe_value}")
+        suffix = f" {' '.join(safe_fields)}" if safe_fields else ""
         with log_lock:
             if os.path.exists(LOG_FILE) and os.path.getsize(LOG_FILE) > 5 * 1024 * 1024:
                 bak_file = LOG_FILE + ".bak"
@@ -45,11 +95,11 @@ def log(msg):
                 except:
                     pass
             with open(LOG_FILE, "a", encoding="utf-8") as f:
-                f.write(f"[{timestamp}] {msg}\n")
+                f.write(f"[{timestamp}] {safe_event}{suffix}\n")
     except:
         pass
 
-log("Gemini ACP Shim started")
+log_event("shim_started")
 
 # Auto-detect LSP framing vs raw lines
 use_lsp_framing = False
@@ -81,7 +131,7 @@ def read_message():
         else:
             return json.loads(stripped.decode('utf-8'))
     except Exception as e:
-        log(f"Error reading message: {e}")
+        log_event("message_read_failed", error=error_category(e))
         return None
 
 def write_message(msg_dict):
@@ -96,7 +146,7 @@ def write_message(msg_dict):
             sys.stdout.buffer.write(payload.encode('utf-8'))
             sys.stdout.buffer.flush()
     except Exception as e:
-        log(f"Error writing message: {e}")
+        log_event("message_write_failed", error=error_category(e))
 
 class SessionStore:
     def __init__(self):
@@ -110,7 +160,7 @@ class SessionStore:
             self.state_dir = os.path.join(workspace_path, ".gemini", "agy-acp")
             self.state_file = os.path.join(self.state_dir, "sessions.json")
             self.lock_file_path = self.state_file + ".lock"
-            log(f"SessionStore workspace set to: {workspace_path}")
+            log_event("session_store_workspace_set")
         
     @contextlib.contextmanager
     def _lock_session(self):
@@ -121,7 +171,7 @@ class SessionStore:
                 try:
                     msvcrt.locking(lk_f.fileno(), msvcrt.LK_LOCK, 1)
                 except Exception as e:
-                    log(f"Lock acquire error: {e}")
+                    log_event("session_lock_failed", error=error_category(e))
             yield
         finally:
             try:
@@ -138,7 +188,7 @@ class SessionStore:
                 with open(self.state_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
             except Exception as e:
-                log(f"Error reading state file: {e}")
+                log_event("session_state_read_failed", error=error_category(e))
         return data
         
     def _write_data(self, data):
@@ -150,7 +200,7 @@ class SessionStore:
                 os.remove(self.state_file)
             os.rename(tmp_file, self.state_file)
         except Exception as e:
-            log(f"Error writing state file: {e}")
+            log_event("session_state_write_failed", error=error_category(e))
             
     def get_session(self, session_id):
         with self._lock_session():
@@ -244,7 +294,7 @@ def extract_text_from_step_payload(blob):
             return None
         return field_1.decode('utf-8', errors='replace')
     except Exception as e:
-        log(f"Error parsing protobuf payload: {e}")
+        log_event("protobuf_parse_failed", error=error_category(e))
         return None
 
 # SQLite Reader
@@ -256,7 +306,6 @@ def read_response_from_db(conversations_dir, conversation_id, after_step_idx):
     try:
         abs_path = os.path.abspath(db_path).replace("\\", "/")
         db_uri = f"file:///{abs_path}?mode=ro"
-        log(f"Opening DB path: {db_path} with URI: {db_uri}")
         conn = sqlite3.connect(db_uri, uri=True)
         cursor = conn.cursor()
         
@@ -283,7 +332,11 @@ def read_response_from_db(conversations_dir, conversation_id, after_step_idx):
             
         return "\n".join(response_parts), max_idx
     except Exception as e:
-        log(f"SQLite read error for {conversation_id}: {e}")
+        log_event(
+            "sqlite_read_failed",
+            conversation=opaque_id(conversation_id),
+            error=error_category(e),
+        )
         return None
     finally:
         if conn:
@@ -322,7 +375,7 @@ def get_conversation_snapshot(conversations_dir):
         files = os.listdir(conversations_dir)
         return {os.path.splitext(f)[0] for f in files if f.endswith(".db")}
     except Exception as e:
-        log(f"Error snapshotting conversations directory: {e}")
+        log_event("conversation_snapshot_failed", error=error_category(e))
         return set()
 
 def scan_for_new_conv(conversations_dir, before_snapshot):
@@ -346,7 +399,7 @@ def scan_for_new_conv(conversations_dir, before_snapshot):
                     pass
             return latest_file
     except Exception as e:
-        log(f"Error scanning for new conversation: {e}")
+        log_event("conversation_scan_failed", error=error_category(e))
     return None
 
 class ConversationIdHolder:
@@ -405,7 +458,11 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
         return
         
     initial_last_idx = holder.get_last_step_idx()
-    log(f"Started polling DB {conv_id} from step {initial_last_idx}")
+    log_event(
+        "database_poll_started",
+        conversation=opaque_id(conv_id),
+        step=initial_last_idx,
+    )
     
     sent_text = ""
     max_idx_seen = initial_last_idx
@@ -420,15 +477,23 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
                 if text.startswith(sent_text):
                     delta = text[len(sent_text):]
                     if delta:
-                        log(f"Sending delta of length {len(delta)} (max_idx={max_idx})")
+                        log_event(
+                            "response_delta_sent",
+                            chars=len(delta),
+                            step=max_idx,
+                        )
                         send_update_notification(session_id, delta)
                         sent_text = text
                 else:
-                    log(f"Warning: text mismatch. Re-sending all text.")
+                    log_event("response_text_mismatch")
                     send_update_notification(session_id, text)
                     sent_text = text
         except Exception as ex:
-            log(f"Error in check_and_send for session {session_id}: {ex}")
+            log_event(
+                "database_poll_iteration_failed",
+                session=opaque_id(session_id),
+                error=error_category(ex),
+            )
                 
     try:
         while not stop_event.is_set():
@@ -439,7 +504,7 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
         check_and_send()
         holder.set_last_step_idx(max_idx_seen)
     except Exception as e:
-        log(f"Error in poll_db_loop: {e}")
+        log_event("database_poll_failed", error=error_category(e))
 
 def check_agy_logs_for_error(conversations_dir):
     try:
@@ -496,7 +561,7 @@ def check_agy_logs_for_error(conversations_dir):
                                     reset_time = hit_time + datetime.timedelta(seconds=total_seconds)
                                     reset_target_str = reset_time.strftime("%Y-%m-%d %H:%M:%S")
                     except Exception as ex:
-                        log(f"Failed parsing log timestamp: {ex}")
+                        log_event("quota_timestamp_parse_failed", error=error_category(ex))
                 
                 if hit_time_str == "unknown":
                     simple_ts = re.search(r'\d{2}:\d{2}:\d{2}', line)
@@ -518,7 +583,7 @@ def check_agy_logs_for_error(conversations_dir):
                 return "Error: Not logged into Antigravity. Please run the login command in the IDE/CLI."
         return None
     except Exception as e:
-        log(f"Error checking agy logs: {e}")
+        log_event("agy_log_check_failed", error=error_category(e))
         return None
 
 def handle_prompt(req_id, params, session_store, conversations_dir):
@@ -560,7 +625,12 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
     args.extend(["-p", prompt_text])
     args.append("--dangerously-skip-permissions")
     
-    log(f"Spawning agy subprocess: {' '.join(args)} in {cwd}")
+    log_event(
+        "subprocess_starting",
+        session=opaque_id(session_id),
+        continuing=bool(conversation_id),
+        prompt_chars=len(prompt_text),
+    )
     
     stop_event = threading.Event()
     holder = ConversationIdHolder(conversation_id, last_step_idx)
@@ -584,7 +654,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                 errors="replace"
             )
         except Exception as e:
-            log(f"Failed to spawn process: {e}")
+            log_event("subprocess_spawn_failed", error=error_category(e))
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -600,20 +670,26 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
             while proc.poll() is None and not new_conv_id:
                 new_conv_id = scan_for_new_conv(conversations_dir, before_snapshot)
                 if new_conv_id:
-                    log(f"Detected new conversation ID: {new_conv_id}")
+                    log_event(
+                        "conversation_detected",
+                        conversation=opaque_id(new_conv_id),
+                    )
                     holder.set(new_conv_id)
                     break
                 time.sleep(0.1)
                 
         # Stderr logging thread
         def log_stderr(stream):
+            line_count = 0
             try:
                 for line in stream:
-                    stripped = line.strip()
-                    if stripped:
-                        log(f"[agy stderr] {stripped}")
+                    if line.strip():
+                        line_count += 1
             except Exception as e:
-                log(f"Error in log_stderr thread: {e}")
+                log_event("stderr_drain_failed", error=error_category(e))
+            finally:
+                if line_count:
+                    log_event("subprocess_stderr_observed", lines=line_count)
                     
         stderr_thread = threading.Thread(target=log_stderr, args=(proc.stderr,))
         stderr_thread.start()
@@ -625,7 +701,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                 for line in stream:
                     stdout_lines.append(line)
             except Exception as e:
-                log(f"Error in read_stdout thread: {e}")
+                log_event("stdout_drain_failed", error=error_category(e))
                 
         stdout_thread = threading.Thread(target=read_stdout, args=(proc.stdout,))
         stdout_thread.start()
@@ -652,7 +728,10 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         if not conversation_id and not holder.get():
             new_conv_id = scan_for_new_conv(conversations_dir, before_snapshot)
             if new_conv_id:
-                log(f"Detected new conversation ID after exit: {new_conv_id}")
+                log_event(
+                    "conversation_detected_after_exit",
+                    conversation=opaque_id(new_conv_id),
+                )
                 holder.set(new_conv_id)
                 
         # Sleep a bit to allow SQLite to finish writing
@@ -660,7 +739,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         
         if proc.returncode != 0:
             err_msg = f"agy.exe exited with non-zero code {proc.returncode}"
-            log(f"Error: {err_msg}")
+            log_event("subprocess_failed", exit_code=proc.returncode)
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -679,12 +758,17 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         
         if final_conv_id:
             session_store.save_session(session_id, final_conv_id, final_last_step_idx)
-            log(f"Saved session {session_id}: conv_id={final_conv_id}, last_idx={final_last_step_idx}")
+            log_event(
+                "session_saved",
+                session=opaque_id(session_id),
+                conversation=opaque_id(final_conv_id),
+                step=final_last_step_idx,
+            )
             
             if final_last_step_idx <= last_step_idx:
                 err_msg = check_agy_logs_for_error(conversations_dir)
                 if err_msg:
-                    log(f"Detected error in agy logs: {err_msg}")
+                    log_event("agy_error_detected")
                     send_update_notification(session_id, err_msg)
                 else:
                     stdout_text = "".join(stdout_lines).strip()
@@ -695,7 +779,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         else:
             stdout_text = "".join(stdout_lines).strip()
             if stdout_text:
-                log("Fallback to stdout response because no conversation ID was found")
+                log_event("stdout_fallback_used", chars=len(stdout_text))
                 send_update_notification(session_id, stdout_text)
             else:
                 err_msg = check_agy_logs_for_error(conversations_dir)
@@ -717,11 +801,14 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
             if proc_to_kill:
                 try:
                     if proc_to_kill.poll() is None:
-                        log(f"Cleaning up orphaned subprocess for session {session_id}")
+                        log_event(
+                            "orphaned_subprocess_cleanup",
+                            session=opaque_id(session_id),
+                        )
                         proc_to_kill.terminate()
                         proc_to_kill.wait(timeout=1.0)
                 except Exception as e:
-                    log(f"Error cleaning up subprocess: {e}")
+                    log_event("subprocess_cleanup_failed", error=error_category(e))
         stop_event.set()
         if poll_thread.is_alive():
             poll_thread.join(timeout=2.0)
@@ -738,7 +825,10 @@ def handle_cancel(req_id, params):
     with active_processes_lock:
         proc = active_processes.get(session_id)
         if proc:
-            log(f"Terminating subprocess for session {session_id}")
+            log_event(
+                "subprocess_terminating",
+                session=opaque_id(session_id),
+            )
             proc.terminate()
             
     return {
@@ -790,7 +880,7 @@ def main():
             
         params = req.get("params", {})
         
-        log(f"Received request: {method} (id={req_id})")
+        log_event("request_received", method=method)
         
         if method == "initialize":
             # Extract workspace path if available and configure local store

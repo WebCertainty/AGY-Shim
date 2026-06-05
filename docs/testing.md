@@ -28,6 +28,8 @@ requests using Python 3.10 and 3.14 on Windows. It verifies:
 - Python syntax compilation;
 - raw-line and LSP-framed deterministic E2E tests;
 - version interception for all five provider wrappers.
+- privacy-safe logging that excludes prompt content, personal paths, project
+  paths, and raw session identifiers.
 
 ---
 
@@ -48,6 +50,13 @@ For each framing mode, the E2E suite executes a multi-turn conversation on a sin
 * **Subprocess Execution:** The mock agent loads the existing conversation ID via `--conversation <id>` and appends the recall response steps to the database.
 * **Assertions:**
   - Asserts that the recall response streams the word `ORANGE_BANANA` (case-insensitive check), validating that the session state mapping and database index polling persisted correctly across turns.
+
+### Logging Privacy Regression
+* **Action:** Adds a unique secret marker and personal-path sentinel to the
+  first prompt while directing the shim log to an isolated temporary file.
+* **Assertions:** Confirms the log contains a sanitized subprocess lifecycle
+  event but does not contain the prompt marker, personal path, project path, or
+  raw ACP session ID.
 
 ---
 

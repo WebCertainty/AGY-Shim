@@ -11,6 +11,7 @@ import json
 import sys
 import os
 import time
+import tempfile
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TESTS_DIR)
@@ -25,12 +26,17 @@ def run_test_with_framing(use_lsp=False):
     log(f"Starting E2E Shim Test (use_lsp={use_lsp})")
     log(f"==================================================")
     
+    log_dir = tempfile.TemporaryDirectory()
+    log_path = os.path.join(log_dir.name, "shim.log")
+    shim_env = os.environ.copy()
+    shim_env["AGY_SHIM_LOG_FILE"] = log_path
     proc = subprocess.Popen(
         [sys.executable, SHIM_FILE],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        bufsize=0
+        bufsize=0,
+        env=shim_env,
     )
     
     def send_req(msg_dict):
@@ -115,7 +121,14 @@ def run_test_with_framing(use_lsp=False):
             "params": {
                 "sessionId": session_id,
                 "prompt": [
-                    {"type": "text", "text": "Remember this word: ORANGE_BANANA. Reply with only: OK"}
+                    {
+                        "type": "text",
+                        "text": (
+                            "Remember this word: ORANGE_BANANA. Reply with only: OK. "
+                            "Privacy sentinel: DO_NOT_LOG_THIS_SECRET. "
+                            "Private path: C:\\Users\\Sensitive User\\private.txt"
+                        ),
+                    }
                 ]
             }
         }
@@ -188,6 +201,16 @@ def run_test_with_framing(use_lsp=False):
         proc.terminate()
         proc.wait()
         log("Shim process terminated.")
+
+    with open(log_path, "r", encoding="utf-8") as f:
+        shim_log = f.read()
+    assert "DO_NOT_LOG_THIS_SECRET" not in shim_log, "Prompt content leaked to shim log"
+    assert "Sensitive User" not in shim_log, "Personal path leaked to shim log"
+    assert PROJECT_ROOT not in shim_log, "Project path leaked to shim log"
+    assert session_id not in shim_log, "Raw session ID leaked to shim log"
+    assert "subprocess_starting" in shim_log, "Expected sanitized lifecycle event"
+    log_dir.cleanup()
+    log("Privacy-safe logging test passed.")
         
     log("All tests passed successfully for this framing mode!")
 

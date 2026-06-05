@@ -47,6 +47,10 @@ A Python script that:
 * **Subprocess Exit Verification:** Checks `proc.returncode` and maps non-zero exits to standard JSON-RPC protocol error responses.
 * **Real-time SQLite Polling:** Connects to the WAL-mode SQLite database in read-only mode (`mode=ro`) and polls the `steps` table concurrently. Extracts and streams token updates (`session/update`) in real-time as `agy.exe` appends new execution steps.
 * **Safe Resource Release:** Explicitly closes spawned subprocess stdout/stderr handles after reader threads complete to prevent file descriptor leaks.
+* **Privacy-Safe Logging:** Records allowlisted lifecycle metadata only. Prompt
+  content, command lines, personal paths, raw subprocess output, exception
+  messages, and raw session/conversation IDs are excluded; identifiers are
+  correlated using truncated hashes.
 * **Log Rotation:** Automatically rotates `gemini_shim.log` when it exceeds 5MB to prevent unbounded disk usage.
 
 ### 2. Wrapper Scripts

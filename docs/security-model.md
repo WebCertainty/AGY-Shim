@@ -29,7 +29,8 @@ deployment explicitly establishes otherwise.
 - Wrapper names can shadow legitimate provider executables.
 - Host sign-in or update controls can invoke unsupported provider commands,
   install genuine provider CLIs, or change which executable wins on `PATH`.
-- Logs may contain prompts, paths, errors, or identifiers.
+- Logs contain sanitized lifecycle metadata by default. Future logging changes
+  could still reintroduce prompts, paths, subprocess output, or identifiers.
 - SQLite/protobuf parsing consumes data outside the shim's control.
 - Blocking request handling may prevent timely cancellation.
 
@@ -54,7 +55,9 @@ deployment explicitly establishes otherwise.
 
 ### Information Disclosure
 
-- Redact credentials, prompt content, conversation IDs, and personal paths.
+- Keep credentials, prompt content, raw subprocess output, conversation IDs,
+  session IDs, exception messages, command lines, and personal paths out of
+  logs. Session and conversation correlation uses truncated SHA-256 hashes.
 - Bound log retention and document deletion behavior.
 
 ### Denial of Service
