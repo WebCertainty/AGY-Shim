@@ -54,6 +54,29 @@ Support for another ACP host must be established with host-specific
 interoperability tests, including initialization negotiation, framing, session
 lifecycle, cancellation, error responses, and concurrent requests.
 
+## Rationale
+
+On 18 June 2026 Google announced that the Gemini CLI will transition to the
+Antigravity CLI (https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/), and Antigravity does not yet offer a native
+ACP integration. This creates an immediate compatibility gap for Gemini
+subscribers who rely on third‑party harnesses (for example, Clairvoyance by
+Stardock). To provide a pragmatic, short-term path forward, Antigravity 2.0
+and Clairvoyance agents (Codex and Gemini) were used to develop this
+Windows-only Python shim that lets agy.exe masquerade as a recognized
+provider CLI. It has been tested against Clairvoyance's cloud detection
+(masquerading as "Copilot CLI").
+
+During development, Antigravity and Codex token usage was exhausted; an
+AGY-SHIM agent was used to perform additional code reviews, publishing,
+and verification tasks (including gstack /cso and /review skill checks), and
+final reviews were completed using Antigravity (outside Clairvoyance), and
+within Clairvoyance using Codex and Gemini agents, with a last-pass review by
+the AGY-SHIM agent.
+
+This implementation is intentionally limited (Windows-only, review-only)
+and intended for evaluation rather than production deployment. See SECURITY.md
+and docs/security-model.md for the security rationale and required opt-ins.
+
 ## Architecture
 
 ```text
