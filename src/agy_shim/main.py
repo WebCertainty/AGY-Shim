@@ -1045,23 +1045,26 @@ def main():
                     cancellation_events[session_id] = False
                     
             def run_prompt_worker(req_id, params):
+                resp = None
                 try:
                     resp = handle_prompt(req_id, params, session_store, conversations_dir)
-                    write_message(resp)
                 except Exception as e:
                     log_event("prompt_worker_failed", error=error_category(e))
-                    write_message({
+                    resp = {
                         "jsonrpc": "2.0",
                         "id": req_id,
                         "error": {
                             "code": -32000,
                             "message": f"Error: internal error in prompt handler ({error_category(e)})."
                         }
-                    })
+                    }
                 finally:
                     with prompt_lock:
                         global prompt_running
                         prompt_running = False
+                
+                if resp is not None:
+                    write_message(resp)
                         
             t = threading.Thread(
                 target=run_prompt_worker,
