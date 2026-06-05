@@ -23,7 +23,7 @@ deployment explicitly establishes otherwise.
 ## High-Risk Behaviors
 
 - The shim starts an autonomous agent with workspace access.
-- `--dangerously-skip-permissions` may bypass interactive safeguards.
+- `--dangerously-skip-permissions` may bypass interactive safeguards, gated by the `AGY_SHIM_ALLOW_BYPASS=1` environment variable.
 - Child processes inherit the shim's environment by default.
 - Executable discovery may be influenced by `AGY_PATH` and `PATH`.
 - Wrapper names can shadow legitimate provider executables.
@@ -32,7 +32,7 @@ deployment explicitly establishes otherwise.
 - Logs contain sanitized lifecycle metadata by default. Future logging changes
   could still reintroduce prompts, paths, subprocess output, or identifiers.
 - SQLite/protobuf parsing consumes data outside the shim's control.
-- Blocking request handling may prevent timely cancellation.
+- Blocking request handling is mitigated by asynchronous thread dispatch and cancellation handlers.
 
 ## Required Review Areas
 
@@ -70,7 +70,7 @@ deployment explicitly establishes otherwise.
 
 ### Elevation of Privilege
 
-- Remove or make explicit the permission-bypass mode.
+- Require explicit opt-in (`AGY_SHIM_ALLOW_BYPASS=1`) for the permission-bypass mode.
 - Minimize inherited environment variables and filesystem access.
 
 ### Operational Controls

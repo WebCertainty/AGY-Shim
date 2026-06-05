@@ -189,7 +189,8 @@ See [docs/testing.md](docs/testing.md) for the intended verification matrix.
 ## Security
 
 This tool launches an autonomous subprocess with workspace access. The current
-implementation passes `--dangerously-skip-permissions` to `agy.exe`; this is a
+implementation passes `--dangerously-skip-permissions` to `agy.exe` but requires the
+environment variable `AGY_SHIM_ALLOW_BYPASS=1` to be explicitly set. This is a
 material security decision, not a convenience flag.
 
 Do not use AGY-Shim with sensitive repositories or credentials until the
