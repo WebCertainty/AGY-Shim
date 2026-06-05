@@ -42,6 +42,7 @@ def run_test_with_framing(use_lsp=False):
     shim_env = os.environ.copy()
     shim_env["AGY_SHIM_LOG_FILE"] = log_path
     shim_env["USERPROFILE"] = profile_dir
+    shim_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
     proc = subprocess.Popen(
         [sys.executable, SHIM_FILE],
         stdin=subprocess.PIPE,
@@ -208,6 +209,14 @@ def run_test_with_framing(use_lsp=False):
         log(f"TEST FAILED: {e}")
         import traceback
         traceback.print_exc()
+        try:
+            proc.terminate()
+            proc.wait(timeout=1.0)
+            err_data = proc.stderr.read()
+            if err_data:
+                log(f"Shim stderr: {err_data.decode('utf-8', errors='replace')}")
+        except Exception as ex:
+            log(f"Failed to read stderr: {ex}")
         sys.exit(1)
     finally:
         # Terminate
@@ -234,12 +243,359 @@ def run_test_with_framing(use_lsp=False):
         
     log("All tests passed successfully for this framing mode!")
 
+def test_bypass_enforcement():
+    log("Running bypass enforcement test...")
+    runtime_dir = tempfile.TemporaryDirectory()
+    log_path = os.path.join(runtime_dir.name, "logs", "shim.log")
+    profile_dir = os.path.join(runtime_dir.name, "profile")
+    workspace_dir = os.path.join(runtime_dir.name, "workspace")
+    os.makedirs(profile_dir)
+    os.makedirs(workspace_dir)
+    
+    shim_env = os.environ.copy()
+    shim_env["AGY_SHIM_LOG_FILE"] = log_path
+    shim_env["USERPROFILE"] = profile_dir
+    # Note: AGY_SHIM_ALLOW_BYPASS is intentionally NOT set
+    
+    proc = subprocess.Popen(
+        [sys.executable, SHIM_FILE],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+        env=shim_env,
+    )
+    
+    try:
+        # 1. Initialize
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": 1,
+                "clientInfo": {"name": "test-runner", "version": "1.0.0"},
+                "rootUri": Path(workspace_dir).as_uri(),
+            }
+        }).encode('utf-8') + b"\n")
+        proc.stdout.readline()
+        
+        # 2. session/new
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "session/new",
+            "params": {}
+        }).encode('utf-8') + b"\n")
+        resp2 = json.loads(proc.stdout.readline().strip().decode('utf-8'))
+        session_id = resp2["result"]["sessionId"]
+        
+        # 3. session/prompt (should fail)
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "Hello"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        resp3 = json.loads(proc.stdout.readline().strip().decode('utf-8'))
+        assert "error" in resp3, "Expected error due to missing bypass flag"
+        assert resp3["error"]["code"] == -32000, f"Expected error code -32000, got {resp3['error']['code']}"
+        assert "Safe-mode active" in resp3["error"]["message"]
+        log("Bypass enforcement check passed.")
+        
+    finally:
+        proc.terminate()
+        proc.wait()
+        runtime_dir.cleanup()
+
+def test_concurrency_and_slot_release():
+    log("Running concurrency and slot release test...")
+    runtime_dir = tempfile.TemporaryDirectory()
+    log_path = os.path.join(runtime_dir.name, "logs", "shim.log")
+    profile_dir = os.path.join(runtime_dir.name, "profile")
+    workspace_dir = os.path.join(runtime_dir.name, "workspace")
+    os.makedirs(profile_dir)
+    os.makedirs(workspace_dir)
+    
+    shim_env = os.environ.copy()
+    shim_env["AGY_SHIM_LOG_FILE"] = log_path
+    shim_env["USERPROFILE"] = profile_dir
+    shim_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
+    shim_env["AGY_MOCK_SLOW_DELAY"] = "2.0" # Make mock sleep 2.0s
+    
+    proc = subprocess.Popen(
+        [sys.executable, SHIM_FILE],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+        env=shim_env,
+    )
+    
+    try:
+        # 1. Initialize
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": 1,
+                "clientInfo": {"name": "test-runner", "version": "1.0.0"},
+                "rootUri": Path(workspace_dir).as_uri(),
+            }
+        }).encode('utf-8') + b"\n")
+        proc.stdout.readline()
+        
+        # 2. session/new
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "session/new",
+            "params": {}
+        }).encode('utf-8') + b"\n")
+        resp2 = json.loads(proc.stdout.readline().strip().decode('utf-8'))
+        session_id = resp2["result"]["sessionId"]
+        
+        # 3. First session/prompt (slow)
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "First prompt"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        # Sleep slightly to let first prompt start and lock the busy slot
+        time.sleep(0.5)
+        
+        # 4. Second session/prompt (should return busy error immediately)
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "Second prompt"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        # Read the immediate response (should be the busy error for ID 4)
+        resp4 = json.loads(proc.stdout.readline().strip().decode('utf-8'))
+        assert "error" in resp4, "Expected busy error for second concurrent prompt"
+        assert resp4["id"] == 4
+        assert resp4["error"]["code"] == -32000
+        assert "Agent is busy" in resp4["error"]["message"]
+        log("Concurrency rejection check passed.")
+        
+        # Now wait for the first prompt's updates and final response (ID 3)
+        got_update = False
+        while True:
+            line = proc.stdout.readline()
+            resp3 = json.loads(line.strip().decode('utf-8'))
+            if resp3.get("method") == "session/update":
+                got_update = True
+            elif resp3.get("id") == 3:
+                assert "error" not in resp3
+                assert resp3["result"]["stopReason"] == "end_turn"
+                break
+        assert got_update
+        log("First slow prompt completed successfully.")
+        
+        # 5. Third session/prompt (should be accepted since slot is released)
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "Third prompt"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        # Read final response for ID 5 (with its updates)
+        got_update = False
+        while True:
+            line = proc.stdout.readline()
+            resp5 = json.loads(line.strip().decode('utf-8'))
+            if resp5.get("method") == "session/update":
+                got_update = True
+            elif resp5.get("id") == 5:
+                assert "error" not in resp5
+                assert resp5["result"]["stopReason"] == "end_turn"
+                break
+        assert got_update
+        log("Slot release and subsequent prompt check passed.")
+        
+    finally:
+        proc.terminate()
+        proc.wait()
+        runtime_dir.cleanup()
+
+def test_cancellation():
+    log("Running cancellation tests (request and notification styles)...")
+    runtime_dir = tempfile.TemporaryDirectory()
+    log_path = os.path.join(runtime_dir.name, "logs", "shim.log")
+    profile_dir = os.path.join(runtime_dir.name, "profile")
+    workspace_dir = os.path.join(runtime_dir.name, "workspace")
+    os.makedirs(profile_dir)
+    os.makedirs(workspace_dir)
+    
+    shim_env = os.environ.copy()
+    shim_env["AGY_SHIM_LOG_FILE"] = log_path
+    shim_env["USERPROFILE"] = profile_dir
+    shim_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
+    shim_env["AGY_MOCK_SLOW_DELAY"] = "3.0" # Make mock sleep 3.0s
+    
+    proc = subprocess.Popen(
+        [sys.executable, SHIM_FILE],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+        env=shim_env,
+    )
+    
+    try:
+        # Initialize & session/new
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": 1, "clientInfo": {"name": "test-runner"}, "rootUri": Path(workspace_dir).as_uri()}
+        }).encode('utf-8') + b"\n")
+        proc.stdout.readline()
+        
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {}
+        }).encode('utf-8') + b"\n")
+        resp2 = json.loads(proc.stdout.readline().strip().decode('utf-8'))
+        session_id = resp2["result"]["sessionId"]
+        
+        # --- TEST 1: Request-Style Cancellation (with id) ---
+        log("Testing request-style cancellation...")
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "Slow prompt 1"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        time.sleep(0.5)
+        
+        # Send cancel request
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "session/cancel",
+            "params": {
+                "sessionId": session_id
+            }
+        }).encode('utf-8') + b"\n")
+        
+        # Read messages until we have both response 3 and response 4
+        responses = {}
+        while len(responses) < 2 or 3 not in responses or 4 not in responses:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            msg = json.loads(line.strip().decode('utf-8'))
+            if msg.get("id") is not None:
+                responses[msg.get("id")] = msg
+            else:
+                log(f"Received notification while waiting: {msg}")
+            
+        assert 4 in responses, "Missing cancel request response"
+        assert "result" in responses[4]
+        
+        assert 3 in responses, "Missing prompt cancelled response"
+        assert "error" in responses[3]
+        assert "cancelled" in responses[3]["error"]["message"]
+        log("Request-style cancellation passed.")
+        
+        # Verify slot released by running a successful prompt
+        log("Testing slot release after cancellation...")
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "Subsequent prompt"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        while True:
+            line = proc.stdout.readline()
+            msg = json.loads(line.strip().decode('utf-8'))
+            if msg.get("id") == 5:
+                assert "error" not in msg
+                break
+        log("Slot release after cancellation passed.")
+        
+        # --- TEST 2: Notification-Style Cancellation (no id) ---
+        log("Testing notification-style cancellation...")
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "Slow prompt 2"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        time.sleep(0.5)
+        
+        # Send cancel notification (no id)
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "method": "session/cancel",
+            "params": {
+                "sessionId": session_id
+            }
+        }).encode('utf-8') + b"\n")
+        
+        # Read response. Since cancel was a notification, we only expect ONE response (the prompt cancellation error, id=6)
+        resp6 = None
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            msg = json.loads(line.strip().decode('utf-8'))
+            if msg.get("id") == 6:
+                resp6 = msg
+                break
+            else:
+                log(f"Received notification while waiting: {msg}")
+                
+        assert resp6 is not None
+        assert "error" in resp6
+        assert "cancelled" in resp6["error"]["message"]
+        log("Notification-style cancellation passed.")
+        
+    finally:
+        proc.terminate()
+        proc.wait()
+        runtime_dir.cleanup()
+
 def main():
     # Test raw newline-delimited mode
     run_test_with_framing(use_lsp=False)
     
     # Test LSP Content-Length framing mode
     run_test_with_framing(use_lsp=True)
+    
+    # Run new security and concurrency test cases
+    test_bypass_enforcement()
+    test_concurrency_and_slot_release()
+    test_cancellation()
     
     log("\n==================================================")
     log("ALL TESTS COMPLETED SUCCESSFULLY!")

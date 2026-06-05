@@ -37,9 +37,11 @@ Reviewers should assume that:
 - inherited environment variables may contain credentials;
 - multiple clients or sessions may operate concurrently.
 
-The current implementation may invoke `agy.exe` with
-`--dangerously-skip-permissions`. Run it only in an isolated environment with
-the minimum credentials and filesystem access necessary.
+The current implementation invokes `agy.exe` with
+`--dangerously-skip-permissions` but requires the environment variable
+`AGY_SHIM_ALLOW_BYPASS=1` to be explicitly set. Without this variable, the
+shim will reject prompt executions with an error. Run it only in an isolated
+environment with the minimum credentials and filesystem access necessary.
 
 ## Disclosure
 

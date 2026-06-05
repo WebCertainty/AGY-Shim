@@ -51,6 +51,14 @@ def main():
         else:
             i += 1
             
+    # Apply mock delay if requested via environment variable
+    delay_str = os.environ.get("AGY_MOCK_SLOW_DELAY")
+    if delay_str:
+        try:
+            time.sleep(float(delay_str))
+        except ValueError:
+            time.sleep(1.0)
+            
     user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
     conversations_dir = os.path.join(user_profile, ".gemini", "antigravity-cli", "conversations")
     os.makedirs(conversations_dir, exist_ok=True)

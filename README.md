@@ -82,11 +82,16 @@ More detail is in [docs/architecture.md](docs/architecture.md).
 
 ## Requirements
 
-- Windows
+- Windows (AGY-Shim is Windows-only and enforces this check on startup)
 - Python 3.10 or later
 - Antigravity CLI installed and authenticated
 - An ACP-compatible host; currently tested with
   [Stardock Clairvoyance](https://www.clairvoyanceai.com)
+
+### Environment Variables
+
+* **`AGY_SHIM_ALLOW_BYPASS`**: Must be set exactly to `1` to run prompt execution. Without it, the shim operates in safe-mode and rejects all prompt requests.
+* **`AGY_PATH`**: Explicit path to the `agy.exe` executable (optional).
 
 The shim searches for `agy.exe` using:
 
@@ -104,6 +109,7 @@ review environment.
 git clone https://github.com/OWNER/agy-shim.git
 cd agy-shim
 $env:AGY_PATH = "$env:LOCALAPPDATA\agy\bin\agy.exe"
+$env:AGY_SHIM_ALLOW_BYPASS = "1"
 $env:PATH = "$PWD\bin;$env:PATH"
 ```
 

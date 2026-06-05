@@ -27,6 +27,11 @@ try:
 except ImportError:
     msvcrt = None
 
+def verify_platform():
+    if sys.platform != "win32":
+        raise OSError("AGY-Shim is Windows-only. Unsupported platform.")
+
+
 # Keep generated runtime logs together when running from a checkout.
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(PACKAGE_DIR))
@@ -38,6 +43,14 @@ LOG_FILE = os.environ.get(
 # Global stdout lock to prevent interleaved concurrent prints
 stdout_lock = threading.Lock()
 log_lock = threading.Lock()
+
+# Global busy slot tracking for prompt execution
+prompt_running = False
+prompt_lock = threading.Lock()
+
+# Global cancellation tracking (maps session_id -> boolean)
+cancellation_events = {}
+cancellation_events_lock = threading.Lock()
 
 def opaque_id(value):
     if not value:
@@ -598,6 +611,16 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
             "error": {"code": -32602, "message": "missing sessionId"}
         }
         
+    if os.environ.get("AGY_SHIM_ALLOW_BYPASS") != "1":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {
+                "code": -32000,
+                "message": "Error: Safe-mode active. AGY_SHIM_ALLOW_BYPASS=1 is required to run prompts bypassing interactive permission checks."
+            }
+        }
+        
     sess_data = session_store.get_session(session_id)
     if sess_data is None:
         return {
@@ -645,6 +668,12 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
     poll_thread.start()
     
     try:
+        # Check cancellation before spawn
+        with cancellation_events_lock:
+            is_cancelled = cancellation_events.get(session_id, False)
+        if is_cancelled:
+            raise Exception("cancelled_before_spawn")
+            
         try:
             proc = subprocess.Popen(
                 args,
@@ -661,10 +690,17 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "error": {"code": -32000, "message": f"failed to run agy: {e}"}
+                "error": {"code": -32000, "message": f"failed to run agy: {error_category(e)}"}
             }
             
+        # Check cancellation immediately after spawn
         with active_processes_lock:
+            with cancellation_events_lock:
+                is_cancelled = cancellation_events.get(session_id, False)
+            if is_cancelled:
+                proc.terminate()
+                proc.wait()
+                raise Exception("cancelled_after_spawn")
             active_processes[session_id] = proc
             
         # Bind conversation ID in background if not already bound
@@ -741,6 +777,18 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         time.sleep(0.5)
         
         if proc.returncode != 0:
+            with cancellation_events_lock:
+                is_cancelled = cancellation_events.get(session_id, False)
+            if is_cancelled:
+                log_event("prompt_cancelled", session=opaque_id(session_id))
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {
+                        "code": -32000,
+                        "message": "Error: prompt execution cancelled."
+                    }
+                }
             err_msg = f"agy.exe exited with non-zero code {proc.returncode}"
             log_event("subprocess_failed", exit_code=proc.returncode)
             return {
@@ -798,6 +846,20 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                 "stopReason": "end_turn"
             }
         }
+    except Exception as e:
+        with cancellation_events_lock:
+            is_cancelled = cancellation_events.get(session_id, False)
+        if is_cancelled or str(e) in ("cancelled_before_spawn", "cancelled_after_spawn"):
+            log_event("prompt_cancelled", session=opaque_id(session_id))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32000,
+                    "message": "Error: prompt execution cancelled."
+                }
+            }
+        raise e
     finally:
         with active_processes_lock:
             proc_to_kill = active_processes.pop(session_id, None)
@@ -815,6 +877,8 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         stop_event.set()
         if poll_thread.is_alive():
             poll_thread.join(timeout=2.0)
+        with cancellation_events_lock:
+            cancellation_events.pop(session_id, None)
 
 def handle_cancel(req_id, params):
     session_id = params.get("sessionId")
@@ -824,6 +888,9 @@ def handle_cancel(req_id, params):
             "id": req_id,
             "error": {"code": -32602, "message": "missing sessionId"}
         }
+        
+    with cancellation_events_lock:
+        cancellation_events[session_id] = True
         
     with active_processes_lock:
         proc = active_processes.get(session_id)
@@ -841,6 +908,7 @@ def handle_cancel(req_id, params):
     }
 
 def main():
+    global prompt_running
     provider = "gemini" # default fallback
     args = sys.argv[1:]
     
@@ -865,6 +933,12 @@ def main():
             print(f"Gemini ACP Shim (Masquerading as {provider})")
             sys.exit(0)
             
+    try:
+        verify_platform()
+    except OSError as e:
+        sys.stderr.write(f"Error: {e}\n")
+        sys.exit(1)
+            
     session_store = SessionStore()
     user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
     conversations_dir = os.path.join(user_profile, ".gemini", "antigravity-cli", "conversations")
@@ -876,13 +950,19 @@ def main():
             
         method = req.get("method")
         req_id = req.get("id")
+        params = req.get("params", {})
         
-        # If it's a notification (no id), we skip/ignore
+        # Intercept session/cancel before checking for null/absent req_id
+        if method == "session/cancel":
+            resp = handle_cancel(req_id, params)
+            if req_id is not None:
+                write_message(resp)
+            continue
+            
+        # If it's any other notification (no id), we skip/ignore
         if req_id is None:
             continue
             
-        params = req.get("params", {})
-        
         log_event("request_received", method=method)
         
         if method == "initialize":
@@ -931,12 +1011,65 @@ def main():
                 }
             write_message(resp)
         elif method == "session/prompt":
-            # handle_prompt will send notifications, and return the final response dict
-            resp = handle_prompt(req_id, params, session_store, conversations_dir)
-            write_message(resp)
-        elif method == "session/cancel":
-            resp = handle_cancel(req_id, params)
-            write_message(resp)
+            if os.environ.get("AGY_SHIM_ALLOW_BYPASS") != "1":
+                write_message({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {
+                        "code": -32000,
+                        "message": "Error: Safe-mode active. AGY_SHIM_ALLOW_BYPASS=1 is required to run prompts bypassing interactive permission checks."
+                    }
+                })
+                continue
+                
+            acquired = False
+            with prompt_lock:
+                if not prompt_running:
+                    prompt_running = True
+                    acquired = True
+                    
+            if not acquired:
+                write_message({
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {
+                        "code": -32000,
+                        "message": "Error: Agent is busy. Concurrent prompts are not supported."
+                    }
+                })
+                continue
+                
+            session_id = params.get("sessionId")
+            if session_id:
+                with cancellation_events_lock:
+                    cancellation_events[session_id] = False
+                    
+            def run_prompt_worker(req_id, params):
+                try:
+                    resp = handle_prompt(req_id, params, session_store, conversations_dir)
+                    write_message(resp)
+                except Exception as e:
+                    log_event("prompt_worker_failed", error=error_category(e))
+                    write_message({
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {
+                            "code": -32000,
+                            "message": f"Error: internal error in prompt handler ({error_category(e)})."
+                        }
+                    })
+                finally:
+                    with prompt_lock:
+                        global prompt_running
+                        prompt_running = False
+                        
+            t = threading.Thread(
+                target=run_prompt_worker,
+                args=(req_id, params),
+                name=f"PromptWorker-{str(session_id)[:8]}"
+            )
+            t.daemon = True
+            t.start()
         elif method == "session/close":
             resp = {
                 "jsonrpc": "2.0",

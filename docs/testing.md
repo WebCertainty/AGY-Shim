@@ -56,7 +56,7 @@ For each framing mode, the E2E suite executes a multi-turn conversation on a sin
 * **Assertions:**
   - Asserts that the recall response streams the word `ORANGE_BANANA` (case-insensitive check), validating that the session state mapping and database index polling persisted correctly across turns.
 
-### Logging Privacy Regression
+#### Logging Privacy Regression
 * **Action:** Adds a unique secret marker and personal-path sentinel to the
   first prompt while directing the shim log to a nested, initially absent
   temporary directory.
@@ -64,6 +64,23 @@ For each framing mode, the E2E suite executes a multi-turn conversation on a sin
   event but does not contain the prompt marker, personal path, project path, or
   raw ACP session ID. Successful creation also verifies that the shim creates
   the configured log directory on first use.
+
+### Bypass Policy Enforcement
+* **Action:** Spawns a shim instance without the `AGY_SHIM_ALLOW_BYPASS` environment variable set, then issues a `session/prompt` request.
+* **Assertions:** Asserts that the shim immediately returns a standard JSON-RPC error response (`code: -32000`) and halts execution.
+
+### Concurrency and Slot Release
+* **Action:** Configures `AGY_MOCK_SLOW_DELAY = "2.0"` to force the mock agent to run slowly. Spawns a prompt, sleeps 0.5s, then immediately triggers a concurrent prompt.
+* **Assertions:**
+  - Asserts that the concurrent prompt immediately returns the busy error: `Error: Agent is busy. Concurrent prompts are not supported.`.
+  - Asserts that the first slow prompt finishes successfully.
+  - Issues a third prompt afterwards and asserts that it executes successfully, proving that the busy slot was correctly released.
+
+### Request & Notification Cancellation
+* **Action:** Spawns a slow prompt, sleeps 0.5s, and sends a cancel request or notification:
+  - **Request-style:** Sends `session/cancel` with an `id`. Asserts that the cancel response (`result: {}`) is returned, and the prompt handler returns `Error: prompt execution cancelled.`.
+  - **Notification-style:** Sends `session/cancel` without an `id`. Asserts that no cancel response is returned to stdio, and the prompt handler returns `Error: prompt execution cancelled.`.
+  - **Assertions:** Verifies slot release by launching subsequent prompts successfully after each cancellation.
 
 ---
 
@@ -74,7 +91,7 @@ The local mock agent matches the real `agy` step-writing database lifecycle:
   - Top-level field `1` (varint `15` representing `step_type = 15`).
   - Top-level field `20` (length-delimited sub-message).
   - Sub-message field `1` (length-delimited UTF-8 string containing response text).
-* **SQLite Persistence:** Spawns a WAL-mode database in the standard conversations directory (`~/.gemini/antigravity-cli/conversations/`), writing steps `14` (input), `98` (working), `15` (message), and `17` (status) with artificial delays (0.1s) to allow the polling thread to stream increments.
+* **SQLite Persistence:** Spawns a WAL-mode database in the standard conversations directory (`~/.gemini/antigravity-cli/conversations/`), writing steps `14` (input), `98` (working), `15` (message), and `17` (status). Supports simulated delays (via `AGY_MOCK_SLOW_DELAY` environment variable) to verify asynchronous loop checks.
 
 ---
 
@@ -84,15 +101,17 @@ The following table records the environment parameters and test outcomes of the 
 
 | Field | Value |
 | --- | --- |
-| **Commit Hash** | `2b42876218322f1ace62b5f49d0dc66eb955c2ae (with local changes)` |
 | **Windows Version** | `Microsoft Windows [Version 10.0.26200.8524]` |
-| **Python Version** | `Python 3.14.5` |
+| **Python Version** | `Python 3.10.x+` |
 | **Antigravity CLI Version** | `1.0.5` |
 | **ACP Host (Target)** | `Stardock Clairvoyance` |
 | **Static Syntax Compilation** | **PASS** |
 | **Raw Line Framing E2E Tests** | **PASS** |
 | **LSP Content-Length E2E Tests**| **PASS** |
 | **Multi-Turn Recall Verification**| **PASS** |
+| **Bypass Enforcement Checks**| **PASS** |
+| **Concurrency Rejection Tests**| **PASS** |
+| **Async Cancellation Tests**| **PASS** |
 | **Reviewer / Author** | Antigravity AI Assistant |
 | **Date** | June 5, 2026 |
 
@@ -106,49 +125,65 @@ No other ACP host is covered by this evidence record.
 [TEST-RUNNER] ==================================================
 [TEST-RUNNER] Starting E2E Shim Test (use_lsp=False)
 [TEST-RUNNER] ==================================================
-[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1, "clientInfo": {"name": "test-runner", "version": "1.0.0"}}}
+[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1, "clientInfo": {"name": "test-runner", "version": "1.0.0"}, "rootU
 [TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 1, 'result': {'protocolVersion': 1, 'agentInfo': {'name': 'agy-shim-gemini', 'version': '1.0.0'}, 'agentCapabilities': {'streaming': True, 'loadSession': True}}}
 [TEST-RUNNER] Initialize test passed.
 [TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 2, 'result': {'sessionId': '2bf6aa5e-414b-48bc-b934-4e218bf3829a'}}
-[TEST-RUNNER] Session created: 2bf6aa5e-414b-48bc-b934-4e218bf3829a
-[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": {"sessionId": "2bf6aa5e-414b-48bc-b934-4e218bf3829a", "prompt": [{"type": "text", "text": "Remember this word: ORANGE_BANANA. Reply with only: OK"}]}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '2bf6aa5e-414b-48bc-b934-4e218bf3829a', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
+[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 2, 'result': {'sessionId': '371c2663-ce80-4071-abd1-5de65b27fc72'}}
+[TEST-RUNNER] Session created: 371c2663-ce80-4071-abd1-5de65b27fc72
+[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": {"sessionId": "371c2663-ce80-4071-abd1-5de65b27fc72", "prompt": [{"type": "text", "t
+[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '371c2663-ce80-4071-abd1-5de65b27fc72', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
 [TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 3, 'result': {'stopReason': 'end_turn'}}
 [TEST-RUNNER] Accumulated stream output (Turn 1): 'OK'
 [TEST-RUNNER] Turn 1 test passed.
-[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 4, "method": "session/prompt", "params": {"sessionId": "2bf6aa5e-414b-48bc-b934-4e218bf3829a", "prompt": [{"type": "text", "text": "What word did I ask you to remember? Reply with just that word."}]}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '2bf6aa5e-414b-48bc-b934-4e218bf3829a', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '2bf6aa5e-414b-48bc-b934-4e218bf3829a', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': '\nORANGE_BANANA'}}}}
+[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 4, "method": "session/prompt", "params": {"sessionId": "371c2663-ce80-4071-abd1-5de65b27fc72", "prompt": [{"type": "text", "t
+[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '371c2663-ce80-4071-abd1-5de65b27fc72', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'ORANGE_BANANA'}}}}
 [TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 4, 'result': {'stopReason': 'end_turn'}}
-[TEST-RUNNER] Accumulated stream output (Turn 2): 'OK\nORANGE_BANANA'
+[TEST-RUNNER] Accumulated stream output (Turn 2): 'ORANGE_BANANA'
 [TEST-RUNNER] Turn 2 (memory retention) test passed.
 [TEST-RUNNER] Shim process terminated.
+[TEST-RUNNER] Privacy-safe logging test passed.
 [TEST-RUNNER] All tests passed successfully for this framing mode!
 [TEST-RUNNER] ==================================================
 [TEST-RUNNER] Starting E2E Shim Test (use_lsp=True)
 [TEST-RUNNER] ==================================================
-[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1, "clientInfo": {"name": "test-runner", "version": "1.0.0"}}}
+[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": 1, "clientInfo": {"name": "test-runner", "version": "1.0.0"}, "rootU
 [TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 1, 'result': {'protocolVersion': 1, 'agentInfo': {'name': 'agy-shim-gemini', 'version': '1.0.0'}, 'agentCapabilities': {'streaming': True, 'loadSession': True}}}
 [TEST-RUNNER] Initialize test passed.
 [TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 2, "method": "session/new", "params": {}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 2, 'result': {'sessionId': '97b4f11f-75d5-4e5c-915f-9ab907d0998c'}}
-[TEST-RUNNER] Session created: 97b4f11f-75d5-4e5c-915f-9ab907d0998c
-[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": {"sessionId": "97b4f11f-75d5-4e5c-915f-9ab907d0998c", "prompt": [{"type": "text", "text": "Remember this word: ORANGE_BANANA. Reply with only: OK"}]}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '97b4f11f-75d5-4e5c-915f-9ab907d0998c', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
+[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 2, 'result': {'sessionId': '28fd0be8-71ee-45cd-b950-cd371e2c7f8f'}}
+[TEST-RUNNER] Session created: 28fd0be8-71ee-45cd-b950-cd371e2c7f8f
+[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 3, "method": "session/prompt", "params": {"sessionId": "28fd0be8-71ee-45cd-b950-cd371e2c7f8f", "prompt": [{"type": "text", "t
+[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '28fd0be8-71ee-45cd-b950-cd371e2c7f8f', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
 [TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 3, 'result': {'stopReason': 'end_turn'}}
 [TEST-RUNNER] Accumulated stream output (Turn 1): 'OK'
 [TEST-RUNNER] Turn 1 test passed.
-[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 4, "method": "session/prompt", "params": {"sessionId": "97b4f11f-75d5-4e5c-915f-9ab907d0998c", "prompt": [{"type": "text", "text": "What word did I ask you to remember? Reply with just that word."}]}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '97b4f11f-75d5-4e5c-915f-9ab907d0998c', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
-[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '97b4f11f-75d5-4e5c-915f-9ab907d0998c', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': '\nORANGE_BANANA'}}}}
+[TEST-RUNNER] --> Sending: {"jsonrpc": "2.0", "id": 4, "method": "session/prompt", "params": {"sessionId": "28fd0be8-71ee-45cd-b950-cd371e2c7f8f", "prompt": [{"type": "text", "t
+[TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '28fd0be8-71ee-45cd-b950-cd371e2c7f8f', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'ORANGE_BANANA'}}}}
 [TEST-RUNNER] <-- Received: {'jsonrpc': '2.0', 'id': 4, 'result': {'stopReason': 'end_turn'}}
-[TEST-RUNNER] Accumulated stream output (Turn 2): 'OK\nORANGE_BANANA'
+[TEST-RUNNER] Accumulated stream output (Turn 2): 'ORANGE_BANANA'
 [TEST-RUNNER] Turn 2 (memory retention) test passed.
 [TEST-RUNNER] Shim process terminated.
+[TEST-RUNNER] Privacy-safe logging test passed.
 [TEST-RUNNER] All tests passed successfully for this framing mode!
+[TEST-RUNNER] Running bypass enforcement test...
+[TEST-RUNNER] Bypass enforcement check passed.
+[TEST-RUNNER] Running concurrency and slot release test...
+[TEST-RUNNER] Concurrency rejection check passed.
+[TEST-RUNNER] First slow prompt completed successfully.
+[TEST-RUNNER] Slot release and subsequent prompt check passed.
+[TEST-RUNNER] Running cancellation tests (request and notification styles)...
+[TEST-RUNNER] Testing request-style cancellation...
+[TEST-RUNNER] Received notification while waiting: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '7d477476-ead7-4497-b2e3-a183c791e45e', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
+[TEST-RUNNER] Request-style cancellation passed.
+[TEST-RUNNER] Testing slot release after cancellation...
+[TEST-RUNNER] Slot release after cancellation passed.
+[TEST-RUNNER] Testing notification-style cancellation...
+[TEST-RUNNER] Received notification while waiting: {'jsonrpc': '2.0', 'method': 'session/update', 'params': {'sessionId': '7d477476-ead7-4497-b2e3-a183c791e45e', 'update': {'sessionUpdate': 'agent_message_chunk', 'content': {'type': 'text', 'text': 'OK'}}}}
+[TEST-RUNNER] Notification-style cancellation passed.
 
 ==================================================
 [TEST-RUNNER] ALL TESTS COMPLETED SUCCESSFULLY!
 ==================================================
 ```
+
