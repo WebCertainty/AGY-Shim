@@ -4,6 +4,8 @@ __pycache__/
 build/
 dist/
 *.log
+*.log.bak
+logs/
 out.txt
 AGENTS.md
 archive/

@@ -51,7 +51,9 @@ A Python script that:
   content, command lines, personal paths, raw subprocess output, exception
   messages, and raw session/conversation IDs are excluded; identifiers are
   correlated using truncated hashes.
-* **Log Rotation:** Automatically rotates `gemini_shim.log` when it exceeds 5MB to prevent unbounded disk usage.
+* **Log Location and Rotation:** Writes generated runtime events to
+  `logs/gemini_shim.log` by default and rotates it when it exceeds 5MB. The
+  `AGY_SHIM_LOG_FILE` environment variable can select another location.
 
 ### 2. Wrapper Scripts
 Five command scripts in `bin/` route calls to the Python shim:

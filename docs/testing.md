@@ -53,10 +53,12 @@ For each framing mode, the E2E suite executes a multi-turn conversation on a sin
 
 ### Logging Privacy Regression
 * **Action:** Adds a unique secret marker and personal-path sentinel to the
-  first prompt while directing the shim log to an isolated temporary file.
+  first prompt while directing the shim log to a nested, initially absent
+  temporary directory.
 * **Assertions:** Confirms the log contains a sanitized subprocess lifecycle
   event but does not contain the prompt marker, personal path, project path, or
-  raw ACP session ID.
+  raw ACP session ID. Successful creation also verifies that the shim creates
+  the configured log directory on first use.
 
 ---
 

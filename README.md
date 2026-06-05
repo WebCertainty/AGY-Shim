@@ -35,6 +35,9 @@ See [SECURITY.md](SECURITY.md) and [docs/review-handoff.md](docs/review-handoff.
 This project is maintained primarily for the author's own use and shared
 as-is. See [SUPPORT.md](SUPPORT.md) for maintenance and support expectations.
 
+Generated privacy-safe runtime events are written to
+`logs/gemini_shim.log` by default. The directory is excluded from Git.
+
 ## Compatibility
 
 AGY-Shim should currently be described as **an experimental ACP bridge for

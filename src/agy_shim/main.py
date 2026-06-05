@@ -25,12 +25,12 @@ try:
 except ImportError:
     msvcrt = None
 
-# Keep runtime logs at the repository root when running from a checkout.
+# Keep generated runtime logs together when running from a checkout.
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(PACKAGE_DIR))
 LOG_FILE = os.environ.get(
     "AGY_SHIM_LOG_FILE",
-    os.path.join(PROJECT_ROOT, "gemini_shim.log"),
+    os.path.join(PROJECT_ROOT, "logs", "gemini_shim.log"),
 )
 
 # Global stdout lock to prevent interleaved concurrent prints
@@ -56,6 +56,8 @@ def log_event(event, **fields):
     """
     try:
         timestamp = datetime.datetime.now().isoformat()
+        log_dir = os.path.dirname(os.path.abspath(LOG_FILE))
+        os.makedirs(log_dir, exist_ok=True)
         safe_event = re.sub(r"[^a-z0-9_.-]", "_", str(event).lower())[:64]
         safe_fields = []
         safe_methods = {

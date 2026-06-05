@@ -27,7 +27,7 @@ def run_test_with_framing(use_lsp=False):
     log(f"==================================================")
     
     log_dir = tempfile.TemporaryDirectory()
-    log_path = os.path.join(log_dir.name, "shim.log")
+    log_path = os.path.join(log_dir.name, "runtime", "logs", "shim.log")
     shim_env = os.environ.copy()
     shim_env["AGY_SHIM_LOG_FILE"] = log_path
     proc = subprocess.Popen(

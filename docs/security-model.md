@@ -58,6 +58,9 @@ deployment explicitly establishes otherwise.
 - Keep credentials, prompt content, raw subprocess output, conversation IDs,
   session IDs, exception messages, command lines, and personal paths out of
   logs. Session and conversation correlation uses truncated SHA-256 hashes.
+- Keep generated logs under the ignored `logs/` directory by default. An
+  operator-supplied `AGY_SHIM_LOG_FILE` location must have equivalent access
+  controls and retention handling.
 - Bound log retention and document deletion behavior.
 
 ### Denial of Service
