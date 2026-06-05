@@ -19,6 +19,7 @@ separated from the Clairvoyance compatibility layer.
 - SQLite/protobuf parsing resilience
 - logging, privacy, and diagnostics
 - provider discovery and executable shadowing
+- host provider authentication/update controls and executable replacement
 - tests, documentation, packaging, and licensing
 
 ## Out of Scope

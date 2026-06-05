@@ -107,6 +107,37 @@ $env:PATH = "$PWD\bin;$env:PATH"
 Do not place the repository ahead of genuine provider CLIs in a production
 `PATH` without understanding the executable-shadowing implications.
 
+### Important: Do Not Use Host Sign-In or Update Controls
+
+> **After AGY-Shim is detected, do not click the host application's Sign In,
+> Auth, Update, Reinstall, or Install controls for the provider identity shown.**
+
+The wrappers identify themselves as Copilot, Claude, Codex, Gemini, or Cursor
+only so a host can discover and launch the ACP bridge. They are not those
+provider CLIs, and their authentication and update flows do not apply to
+AGY-Shim.
+
+Using a host's built-in provider controls may:
+
+- launch an unsupported authentication command against the shim;
+- install or update the genuine provider CLI;
+- replace or take precedence over the shim's wrapper on `PATH`;
+- cause the host to launch the wrong executable on its next detection pass.
+
+Authenticate and update the **Antigravity CLI (`agy.exe`) separately**, using
+Antigravity's own supported process. Update AGY-Shim only by updating this
+repository.
+
+If a provider control was used accidentally:
+
+1. close the ACP host;
+2. run `where.exe <provider>` (for example, `where.exe copilot`);
+3. ensure this repository's `bin` directory is the executable selected for the
+   intended shim identity;
+4. restore the required `PATH` ordering if another CLI now takes precedence;
+5. restart the host and run its detection again;
+6. verify the wrapper with `.\bin\<provider>.cmd --version`.
+
 ## Usage
 
 The wrappers currently supported are:

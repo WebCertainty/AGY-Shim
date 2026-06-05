@@ -27,6 +27,8 @@ deployment explicitly establishes otherwise.
 - Child processes inherit the shim's environment by default.
 - Executable discovery may be influenced by `AGY_PATH` and `PATH`.
 - Wrapper names can shadow legitimate provider executables.
+- Host sign-in or update controls can invoke unsupported provider commands,
+  install genuine provider CLIs, or change which executable wins on `PATH`.
 - Logs may contain prompts, paths, errors, or identifiers.
 - SQLite/protobuf parsing consumes data outside the shim's control.
 - Blocking request handling may prevent timely cancellation.
@@ -42,6 +44,8 @@ deployment explicitly establishes otherwise.
 
 - Protect session state against concurrent or malicious modification.
 - Handle malformed and changing SQLite/protobuf data defensively.
+- Treat host-managed provider installation and update actions as configuration
+  changes that can replace or bypass the intended shim executable.
 
 ### Repudiation
 
@@ -62,6 +66,14 @@ deployment explicitly establishes otherwise.
 
 - Remove or make explicit the permission-bypass mode.
 - Minimize inherited environment variables and filesystem access.
+
+### Operational Controls
+
+- Do not use host Sign In, Auth, Update, Reinstall, or Install actions for a
+  masqueraded provider identity.
+- Authenticate and update `agy.exe` through Antigravity's supported process.
+- Verify executable resolution with `where.exe <provider>` after installation
+  changes or host re-detection.
 
 ## Release Gates
 

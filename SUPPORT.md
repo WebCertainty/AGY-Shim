@@ -17,3 +17,10 @@ permits. General questions can be sent to
 
 Do not send vulnerability details through a public issue. Follow
 [SECURITY.md](SECURITY.md) for private security reporting.
+
+## Provider Controls
+
+Do not use a host application's Sign In, Auth, Update, Reinstall, or Install
+controls for the provider identity used by AGY-Shim. Those actions target the
+genuine provider CLI lifecycle, not the shim. Manage Antigravity authentication
+and updates separately and update AGY-Shim from this repository.

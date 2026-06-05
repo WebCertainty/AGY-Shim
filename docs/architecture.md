@@ -22,6 +22,18 @@ adapter.
 | Conversation SQLite DB | Supplies incremental response records |
 | Session state | Maps ACP session IDs to Antigravity conversation IDs |
 
+## Host Control Boundary
+
+Provider identities exist only for executable discovery and version detection.
+Host controls labelled Sign In, Auth, Update, Reinstall, or Install belong to
+the genuine provider CLI lifecycle and are outside the AGY-Shim protocol.
+
+Those controls must not be used for a masqueraded identity. They may send
+unsupported CLI arguments to the shim or install a genuine provider binary
+that changes executable resolution. Antigravity authentication and upgrades
+must be managed directly through Antigravity; AGY-Shim upgrades must be managed
+through this repository.
+
 ## Request Flow
 
 1. The host starts a provider wrapper from `bin/`.
