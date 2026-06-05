@@ -47,3 +47,18 @@ environment with the minimum credentials and filesystem access necessary.
 
 Please allow reasonable time to investigate and coordinate a fix before public
 disclosure. Security fixes should include regression tests where practical.
+
+## Contact & Disclosure
+
+If you discover a vulnerability, do not post exploit details publicly. Open a private vulnerability report via GitHub (if available) or email hello@webcertainty.com.au to request a secure channel. In your initial message include affected commit/version, environment, minimal reproduction steps or PoC, and impact assessment.
+
+Please allow reasonable time for maintainers to investigate and coordinate fixes before public disclosure. The maintainers aim to acknowledge reports within 72 hours.
+
+## Mitigations & Operational Controls
+
+- CI and PR templates require at least one security reviewer for changes affecting subprocess invocation, permission flags, logging, or credential handling.
+- CI asserts that AGY_SHIM_ALLOW_BYPASS is not set in CI or PR environments.
+- Prefer isolated test environments when enabling AGY_SHIM_ALLOW_BYPASS; never enable in production systems.
+- Keep logs and conversation artifacts out of public releases; sanitize or redact before publishing.
+
+

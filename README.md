@@ -1,5 +1,11 @@
 # AGY-Shim for Stardock Clairvoyance
 
+> WARNING: Google announced the Gemini CLI transition to the Antigravity CLI on 18 June 2026.
+> See: https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
+>
+> This repository provides an experimental Windows-only shim to bridge Antigravity (agy.exe) to ACP hosts for short-term evaluation. See the Rationale and Security sections below before using.
+
+
 AGY-Shim is an experimental Windows bridge that exposes the Antigravity CLI
 (`agy.exe`) through an Agent Client Protocol (ACP) JSON-RPC interface.
 
