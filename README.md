@@ -129,6 +129,12 @@ The shim searches for `agy.exe` using:
 3. `%LOCALAPPDATA%\agy\bin\agy.exe`
 4. `%USERPROFILE%\AppData\Local\agy\bin\agy.exe`
 
+### IMPORTANT — Setup script (read before running)
+
+> **WARNING:** A PowerShell helper script is available at scripts/setup_agy_shim.ps1 to clone/update the repository, configure session environment variables (it prompts to enable AGY_SHIM_ALLOW_BYPASS), and perform basic verification. **THIS SCRIPT HAS NOT BEEN UNIVERSALLY TESTED.**
+>
+> Use ONLY in isolated test VMs or ephemeral accounts. Do NOT enable AGY_SHIM_ALLOW_BYPASS on production or sensitive machines. Inspect the script before running; verify the agy.exe path and that prepending the repo's bin to PATH is acceptable in your environment.
+
 ## Installation
 
 Clone the repository and add its `bin` directory to `PATH` only in an isolated
