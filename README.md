@@ -1,6 +1,6 @@
 # AGY-Shim for Stardock Clairvoyance
 
-> WARNING: Google announced the Gemini CLI transition to the Antigravity CLI on 18 June 2026.
+> WARNING: Google has announced that on 18 June 2026 the Gemini CLI will transition to the Antigravity CLI.
 > See: https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
 >
 > This repository provides an experimental Windows-only shim to bridge Antigravity (agy.exe) to ACP hosts for short-term evaluation. See the Rationale and Security sections below before using.
@@ -64,7 +64,7 @@ lifecycle, cancellation, error responses, and concurrent requests.
 
 ## Rationale
 
-On 18 June 2026 Google announced that the Gemini CLI will transition to the
+Google has announced that on 18 June 2026 the Gemini CLI will transition to the
 Antigravity CLI (https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/), and Antigravity does not yet offer a native
 ACP integration. This creates an immediate compatibility gap for Gemini
 subscribers who rely on third‑party harnesses (for example, Clairvoyance by
@@ -177,12 +177,12 @@ repository.
 If a provider control was used accidentally:
 
 1. close the ACP host;
-2. run `where.exe <provider>` (for example, `where.exe copilot`);
+2. run `where.exe copilot`;
 3. ensure this repository's `bin` directory is the executable selected for the
    intended shim identity;
 4. restore the required `PATH` ordering if another CLI now takes precedence;
 5. restart the host and run its detection again;
-6. verify the wrapper with `.\bin\<provider>.cmd --version`.
+6. verify the wrapper with `.\bin\copilot.cmd --version`.
 
 ## Usage
 
@@ -197,7 +197,7 @@ The wrappers currently supported are:
 Check compatibility version output:
 
 ```powershell
-.\bin\codex.cmd --version
+.\bin\copilot.cmd --version
 ```
 
 An ACP host starts a wrapper and communicates with it over standard input and
