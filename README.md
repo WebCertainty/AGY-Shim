@@ -141,7 +141,7 @@ Clone the repository and add its `bin` directory to `PATH` only in an isolated
 review environment.
 
 ```powershell
-git clone https://github.com/OWNER/agy-shim.git
+git clone https://github.com/dknewton613-cloud/AGY-Shim.git
 cd agy-shim
 $env:AGY_PATH = "$env:LOCALAPPDATA\agy\bin\agy.exe"
 $env:AGY_SHIM_ALLOW_BYPASS = "1"
