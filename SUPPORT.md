@@ -1,5 +1,8 @@
 # Support
 
+> **TL;DR:** This is a limited-maintenance evaluation project with no
+> compatibility or response-time guarantees.
+
 AGY-Shim is maintained primarily for the author's own workflow and is shared
 as-is for evaluation and reuse.
 

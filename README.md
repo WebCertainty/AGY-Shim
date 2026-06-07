@@ -1,264 +1,229 @@
-# AGY-Shim for Stardock Clairvoyance
+# AGY-Shim
 
-> WARNING: Google has announced that on 18 June 2026 the Gemini CLI will transition to the Antigravity CLI.
-> See: https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
->
-> This repository provides an experimental Windows-only shim to bridge Antigravity (agy.exe) to ACP hosts for short-term evaluation. See the Rationale and Security sections below before using.
+AGY-Shim is an experimental Windows bridge that lets an ACP host, currently
+tested with Stardock Clairvoyance, run Antigravity (`agy.exe`) through a
+provider-compatible command such as `copilot`.
 
+> [!WARNING]
+> Prompt execution requires Antigravity's
+> `--dangerously-skip-permissions` mode. Use an isolated test workspace with
+> minimal credentials. Do not use AGY-Shim for production or sensitive work.
 
-AGY-Shim is an experimental Windows bridge that exposes the Antigravity CLI
-(`agy.exe`) through an Agent Client Protocol (ACP) JSON-RPC interface.
+## Quick Start
 
-The protocol core is designed to work with ACP-compatible hosts generally.
-The provider wrappers, discovery behavior, version responses, and current
-end-to-end validation are tailored to Stardock Clairvoyance. Compatibility
-with other ACP hosts has not yet been verified.
+### Required
 
-It is intended for technical evaluation and review. It is not an official
-Stardock, Google, Anthropic, OpenAI, GitHub, Cursor, or Antigravity product.
-
-## Status
-
-**Maturity:** Experimental, externally reviewed, limited maintenance.
-
-The core bridge has demonstrated initialization, session creation, streamed
-responses, and multi-turn conversation continuity. The current implementation
-and security model are documented for evaluation but are not approved for
-production or sensitive workloads.
-
-Known review areas include:
-
-- subprocess lifecycle and cancellation;
-- use of `--dangerously-skip-permissions`;
-- inherited environment variables and credentials;
-- executable discovery and provider masquerading;
-- reliance on Antigravity's internal SQLite and protobuf formats;
-- log retention and sensitive-data handling;
-- concurrent ACP requests and sessions.
-
-See [SECURITY.md](SECURITY.md) and [docs/review-handoff.md](docs/review-handoff.md).
-
-This project is maintained primarily for the author's own use and shared
-as-is. See [SUPPORT.md](SUPPORT.md) for maintenance and support expectations.
-
-Generated privacy-safe runtime events are written to
-`logs/gemini_shim.log` by default. The directory is excluded from Git.
-
-## Compatibility
-
-AGY-Shim should currently be described as **an experimental ACP bridge for
-Antigravity, tested with Clairvoyance**, rather than a universally compatible
-ACP implementation.
-
-**v0.1 testing scope:** End-to-end testing with Stardock Clairvoyance was performed using the Copilot compatibility wrapper. The other provider wrappers passed version-detection checks only; their host integration has not been verified.
-
-The host-independent surface includes JSON-RPC over standard input/output,
-session lifecycle methods, streaming updates, and cancellation. The
-Clairvoyance compatibility layer includes the provider-named wrappers,
-provider version interception, executable discovery assumptions, and the
-workspace behavior exercised by the current tests.
-
-Support for another ACP host must be established with host-specific
-interoperability tests, including initialization negotiation, framing, session
-lifecycle, cancellation, error responses, and concurrent requests.
-
-## Rationale
-
-Google has announced that on 18 June 2026 the Gemini CLI will transition to the
-Antigravity CLI (https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/), and Antigravity does not yet offer a native
-ACP integration. This creates an immediate compatibility gap for Gemini
-subscribers who rely on third‑party harnesses (for example, Clairvoyance by
-Stardock). To provide a pragmatic, short-term path forward, Antigravity 2.0
-and Clairvoyance agents (Codex and Gemini) were used to develop this
-Windows-only Python shim that lets agy.exe masquerade as a recognized
-provider CLI. It has been tested against Clairvoyance's cloud detection
-(masquerading as "Copilot CLI").
-
-During development, Antigravity and Codex token usage was exhausted; an
-AGY-SHIM agent was used to perform additional code reviews, publishing,
-and verification tasks (including gstack /cso and /review skill checks), and
-final reviews were completed using Antigravity (outside Clairvoyance), and
-within Clairvoyance using Codex and Gemini agents, with a last-pass review by
-the AGY-SHIM agent.
-
-This implementation is intentionally limited (Windows-only, review-only)
-and intended for evaluation rather than production deployment. See SECURITY.md
-and docs/security-model.md for the security rationale and required opt-ins.
-
-## Architecture
-
-```text
-Clairvoyance or ACP client
-          |
-          | JSON-RPC 2.0 over stdio
-          v
-Provider wrapper (bin/*.cmd)
-          |
-          v
-src/agy_shim/main.py
-     |              |
-     | starts       | polls read-only
-     v              v
-  agy.exe      Antigravity conversation SQLite DB
-     |
-     v
-Antigravity agent runtime
-```
-
-The provider wrappers allow host applications that discover known CLI names to
-start the same shim. Provider names and version output are compatibility
-identities only; they do not turn Antigravity into those products.
-
-More detail is in [docs/architecture.md](docs/architecture.md).
-
-## Requirements
-
-- Windows (AGY-Shim is Windows-only and enforces this check on startup)
+- Windows 10 or 11
 - Python 3.10 or later
 - Antigravity CLI installed and authenticated
-- An ACP-compatible host; currently tested with
-  [Stardock Clairvoyance](https://www.clairvoyanceai.com)
+- An ACP host; current live evidence is for Stardock Clairvoyance
 
-### Environment Variables
+Graphify is optional. It is not installed with AGY-Shim and is not required
+to install, run, package, or test the shim.
 
-* **`AGY_SHIM_ALLOW_BYPASS`**: Must be set exactly to `1` to run prompt execution. Without it, the shim operates in safe-mode and rejects all prompt requests.
-* **`AGY_PATH`**: Explicit path to the `agy.exe` executable (optional).
-
-The shim searches for `agy.exe` using:
-
-1. `AGY_PATH`
-2. the system `PATH`
-3. `%LOCALAPPDATA%\agy\bin\agy.exe`
-4. `%USERPROFILE%\AppData\Local\agy\bin\agy.exe`
-
-### IMPORTANT — Setup script (read before running)
-
-> **WARNING:** A PowerShell helper script is available at [scripts/setup_agy_shim.ps1](/scripts) to clone/update the repository, configure session environment variables (it prompts to enable AGY_SHIM_ALLOW_BYPASS), and perform basic verification. **THIS SCRIPT HAS NOT BEEN UNIVERSALLY TESTED.**
->
-> Use ONLY in isolated test VMs or ephemeral accounts. Do NOT enable AGY_SHIM_ALLOW_BYPASS on production or sensitive machines. Inspect the script before running; verify the agy.exe path and that prepending the repo's bin to PATH is acceptable in your environment.
-
-## Installation
-
-Clone the repository and add its `bin` directory to `PATH` only in an isolated
-review environment.
+### 1. Clone and install
 
 ```powershell
 git clone https://github.com/WebCertainty/AGY-Shim.git
-cd agy-shim
-$env:AGY_PATH = "$env:LOCALAPPDATA\agy\bin\agy.exe"
-$env:AGY_SHIM_ALLOW_BYPASS = "1"
-$env:PATH = "$PWD\bin;$env:PATH"
+cd AGY-Shim
+python -m pip install .
 ```
 
-Do not place the repository ahead of genuine provider CLIs in a production
-`PATH` without understanding the executable-shadowing implications.
+### 2. Configure the Copilot wrapper
 
-### Important: Do Not Use Host Sign-In or Update Controls
-
-> **After AGY-Shim is detected, do not click the host application's Sign In,
-> Auth, Update, Reinstall, or Install controls for the provider identity shown.**
-
-The wrappers identify themselves as Copilot, Claude, Codex, Gemini, or Cursor
-only so a host can discover and launch the ACP bridge. They are not those
-provider CLIs, and their authentication and update flows do not apply to
-AGY-Shim.
-
-Using a host's built-in provider controls may:
-
-- launch an unsupported authentication command against the shim;
-- install or update the genuine provider CLI;
-- replace or take precedence over the shim's wrapper on `PATH`;
-- cause the host to launch the wrong executable on its next detection pass.
-
-Authenticate and update the **Antigravity CLI (`agy.exe`) separately**, using
-Antigravity's own supported process. Update AGY-Shim only by updating this
-repository.
-
-If a provider control was used accidentally:
-
-1. close the ACP host;
-2. run `where.exe copilot`;
-3. ensure this repository's `bin` directory is the executable selected for the
-   intended shim identity;
-4. restore the required `PATH` ordering if another CLI now takes precedence;
-5. restart the host and run its detection again;
-6. verify the wrapper with `.\bin\copilot.cmd --version`.
-
-## Usage
-
-The wrappers currently supported are:
-
-- `claude.cmd`
-- `codex.cmd`
-- `copilot.cmd`
-- `cursor.cmd`
-- `gemini.cmd`
-
-Check compatibility version output:
+The interactive installer is recommended because it explains the security
+opt-in before making changes:
 
 ```powershell
-.\bin\copilot.cmd --version
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
 ```
 
-An ACP host starts a wrapper and communicates with it over standard input and
-output. The shim is not designed as an interactive terminal application.
+Choose:
 
-## Testing
+1. `Install`
+2. `User` scope for a desktop-launched host such as Clairvoyance
+3. `copilot`
+4. Accept the permission-bypass warning only if the test environment is
+   appropriate
 
-Syntax validation:
+For a temporary terminal-only test, choose `Session` scope instead.
+
+### 3. Verify
+
+Restart the ACP host after a User-scope installation, then run:
 
 ```powershell
-python -m py_compile src\agy_shim\main.py tests\test_e2e.py tests\fixtures\mock_agy.py
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Verify
+.\bin\copilot\copilot.cmd --version
 ```
 
-Live end-to-end test:
+Expected Copilot compatibility version: `1.0.59`.
+
+Do not use the host application's Sign In, Auth, Update, Reinstall, or Install
+controls for the displayed Copilot identity. Authenticate Antigravity
+separately using its supported process.
+
+### 4. Test
+
+Install the test extra and run the deterministic offline suite:
 
 ```powershell
-python tests\test_e2e.py
+python -m pip install -e ".[test]"
+python -m pytest -q
 ```
 
-The live test invokes the installed Antigravity agent and may consume model
-quota, modify its conversation store, and exercise autonomous permissions.
-Run it only in an appropriate test workspace.
+The automated suite uses a local mock agent. It does not call the real
+Antigravity service or consume API quota.
 
-See [scripts/setup_agy_shim.ps1](scripts/setup_agy_shim.ps1) for the helper script and verification steps.
+For live host, authentication, workspace, streaming, cancellation, Staff, and
+nested-recruitment checks, follow [TESTING.md](TESTING.md).
 
+### 5. Uninstall
 
-See [docs/testing.md](docs/testing.md) for the intended verification matrix.
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Uninstall -Scope User
+```
 
-## Security
+Restart PowerShell and the ACP host afterward.
 
-This tool launches an autonomous subprocess with workspace access. The current
-implementation passes `--dangerously-skip-permissions` to `agy.exe` but requires the
-environment variable `AGY_SHIM_ALLOW_BYPASS=1` to be explicitly set. This is a
-material security decision, not a convenience flag.
+## Ask Clairvoyance to set it up
 
-Do not use AGY-Shim with sensitive repositories or credentials until the
-security review is complete. Report vulnerabilities according to
-[SECURITY.md](SECURITY.md).
+From the repository root, give a trusted coding agent this prompt:
+
+```text
+Install and validate AGY-Shim for the Copilot wrapper.
+
+1. Confirm this is Windows, Python is 3.10 or later, and Antigravity's agy.exe
+   exists and is already authenticated.
+2. Explain that prompt execution requires --dangerously-skip-permissions and
+   wait for my explicit approval before changing PATH or environment variables.
+3. After approval, run:
+   powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
+   Select Install, User scope, and copilot.
+4. Run the installer again with -Action Verify.
+5. Run .\bin\copilot\copilot.cmd --version and report the result.
+6. Install the test extra with python -m pip install -e ".[test]" and run
+   python -m pytest -q.
+7. Do not use provider Sign In, Auth, Update, Reinstall, or Install controls.
+8. Do not modify source files, commit, or push. Report every command and result.
+```
+
+The agent must still ask you to accept the permission-bypass risk. A prompt is
+not consent.
+
+## What the shim does
+
+```text
+ACP host
+   |
+   | JSON-RPC over stdin/stdout
+   v
+bin/<provider>/<provider>.exe or .cmd
+   |
+   v
+src/agy_shim/main.py
+   |                         |
+   | starts agy.exe          | reads responses
+   v                         v
+Antigravity process     conversation SQLite database
+```
+
+The provider names are compatibility identities only. AGY-Shim does not turn
+Antigravity into Copilot, Claude, Codex, Gemini, or Cursor.
+
+The native C# launchers exist because some Windows hosts require a real `.exe`
+and do not apply shell `.cmd` lookup behavior. They forward standard streams
+to the Python bridge and contain no ACP implementation. Rebuild them with:
+
+```powershell
+.\scripts\build_launchers.ps1
+```
+
+See [docs/architecture.md](docs/architecture.md) for the detailed request and
+process lifecycle.
+
+## Compatibility and constraints
+
+- Windows only; WSL, MSYS2, Cygwin, macOS, and Linux are not supported.
+- Python 3.10 or later is required.
+- Only one prompt may execute at a time; overlapping prompts receive an
+  `Agent is busy` error.
+- The shim depends on Antigravity's internal conversation database format,
+  which may change without notice.
+- All wrappers pass deterministic discovery and version tests.
+- The automated bridge suite is host-independent and mock-based.
+- Copilot has the strongest manual v0.1 evidence.
+- Gemini through AGY-Shim has active v0.2 Clairvoyance evidence.
+- Claude, Codex, and Cursor require dated live-host validation before
+  compatibility should be claimed.
+
+Google has announced that on 18 June 2026 the Gemini CLI will transition to
+the Antigravity CLI:
+https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
+
+AGY-Shim is an independent evaluation project. It is not an official Google,
+Stardock, GitHub, OpenAI, Anthropic, Cursor, or Antigravity product.
+
+## Configuration
+
+The installer manages:
+
+- `AGY_PATH`: explicit path to `agy.exe`
+- `AGY_SHIM_ALLOW_BYPASS=1`: required opt-in for prompt execution
+- the selected `bin/<provider>` directory on `PATH`
+
+An explicit Antigravity path can be supplied:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 `
+  -Action Install -Scope User -Provider copilot `
+  -AgyPath "C:\Path\To\agy.exe"
+```
+
+For non-interactive automation, `-Bypass` records the caller's explicit
+acceptance of the permission-bypass risk:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 `
+  -Action Install -Scope User -Provider copilot -Bypass
+```
+
+Use this only in controlled automation. The interactive installer is the
+recommended user path.
+
+## Troubleshooting
+
+| Symptom | Action |
+| --- | --- |
+| `Safe-mode active` | Run the installer and explicitly accept the bypass warning |
+| `agy.exe` not found | Install/authenticate Antigravity or pass `-AgyPath` |
+| Wrong CLI launches | Run `where.exe copilot`; the AGY-Shim path must be first |
+| Host still sees old PATH | Restart the host after User-scope changes |
+| Authentication prompt | Authenticate `agy.exe` separately; do not authenticate the wrapper identity |
+| `Agent is busy` | Wait for or cancel the active prompt before starting another |
+| Quota error | Wait for the reported reset time or review Antigravity account limits |
 
 ## Documentation
 
+- [Operator testing guide](TESTING.md)
+- [Quickstart and safe-mode reference](docs/quickstart.md)
 - [Architecture](docs/architecture.md)
 - [Security model](docs/security-model.md)
-- [Testing](docs/testing.md)
-- [Review handoff](docs/review-handoff.md)
-- [Completed code review](docs/reviews/code-review-report.md)
-- [Implementation plan](docs/implementation-plan.md)
+- [Automated test methodology](docs/testing.md)
+- [Optional Graphify workflow](docs/graphify.md)
 - [Contributing](CONTRIBUTING.md)
 - [Support policy](SUPPORT.md)
+- [Changelog](CHANGELOG.md)
+
+## Security and support
+
+Read [SECURITY.md](SECURITY.md) before enabling prompt execution. Report
+vulnerabilities privately as described there.
+
+This project is shared as-is with limited maintenance. See
+[SUPPORT.md](SUPPORT.md).
 
 ## License
 
-AGY-Shim is available under the [MIT License](LICENSE).
-
-The original idea and architecture were inspired in part by the
-[OpenAB project](https://github.com/openabdev/openab). No OpenAB source code is
-included in the distributable working tree.
-
-The local review-method documents
-[`cso-checklist.md`](docs/reviews/cso-checklist.md) and
-[`engineering-checklist.md`](docs/reviews/engineering-checklist.md) were
-adapted from ideas in [gstack](https://github.com/garrytan/gstack), which is
-MIT-licensed.
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+AGY-Shim is available under the [MIT License](LICENSE). Third-party
+acknowledgements are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

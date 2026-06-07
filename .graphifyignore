@@ -1,0 +1,15 @@
+# Generated, local, and historical content excluded from the code graph.
+graphify-out/
+.git/
+.agents/
+.codex/
+.clairvoyance/
+.github/
+archive/
+bin/
+build/
+logs/
+scratch/
+__pycache__/
+.pytest_cache/
+*.pyc

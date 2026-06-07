@@ -1,5 +1,8 @@
 # Implementation Plan: Gemini CLI to Antigravity CLI Shim (with Masquerading)
 
+> **TL;DR:** This is historical design context, not the installation guide.
+> Start with [README.md](../README.md) to use the current implementation.
+
 This plan outlines the design and implementation of a lightweight shim for the Agent Client Protocol (ACP) that bridges to the Antigravity CLI (`agy.exe`). To support Stardock Clairvoyance's auto-detection and avoid conflicts with existing CLI installations, the shim masquerades as multiple AI coding providers.
 
 The JSON-RPC/ACP bridge is intended to remain usable independently of
@@ -56,12 +59,18 @@ A Python script that:
   `AGY_SHIM_LOG_FILE` environment variable can select another location.
 
 ### 2. Wrapper Scripts
-Five command scripts in `bin/` route calls to the Python shim:
-* **`cursor.cmd`**: starts `src/agy_shim/main.py` as `cursor`
-* **`copilot.cmd`**: starts `src/agy_shim/main.py` as `copilot`
-* **`gemini.cmd`**: starts `src/agy_shim/main.py` as `gemini`
-* **`claude.cmd`**: starts `src/agy_shim/main.py` as `claude`
-* **`codex.cmd`**: starts `src/agy_shim/main.py` as `codex`
+Five provider-isolated command scripts route calls to the Python shim:
+* **`bin/cursor/cursor.cmd`**: starts `src/agy_shim/main.py` as `cursor`
+* **`bin/copilot/copilot.cmd`**: starts `src/agy_shim/main.py` as `copilot`
+* **`bin/gemini/gemini.cmd`**: starts `src/agy_shim/main.py` as `gemini`
+* **`bin/claude/claude.cmd`**: starts `src/agy_shim/main.py` as `claude`
+* **`bin/codex/codex.cmd`**: starts `src/agy_shim/main.py` as `codex`
+
+Each provider directory also contains a native `.exe` compiled from
+`scripts/launcher.cs`. It exists for Windows host discovery paths that require
+an executable name. The launcher forwards stdio to the Python bridge and adds
+no ACP or Antigravity logic. Rebuild all launchers with
+`scripts/build_launchers.ps1`.
 
 ### 3. Mock Agent Testing Environment
 To prevent E2E tests from failing due to external network issues, OAuth credentials expiration, or Google API quota limits (e.g., `RESOURCE_EXHAUSTED (code 429)`), the test suite uses a local mock agent:
@@ -77,6 +86,7 @@ To prevent E2E tests from failing due to external network issues, OAuth credenti
 * Run [test_e2e.py](../tests/test_e2e.py). The suite automatically injects the mock testing path, validating both raw JSON lines and LSP Content-Length framing.
 
 ### Manual Verification
-1. Run `.\bin\copilot.cmd --version` to verify version outputs.
+1. Run `.\bin\copilot\copilot.cmd --version` and
+   `.\bin\copilot\copilot.exe --version` to verify version outputs.
 2. Verify Clairvoyance's "Cloud AI" settings tab to check that providers are successfully detected as installed.
 3. Open a workspace inside Clairvoyance, select the masqueraded agent, and verify multi-turn streaming responses with the real `agy.exe` binary.

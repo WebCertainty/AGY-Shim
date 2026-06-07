@@ -1,8 +1,11 @@
 # End-to-End Testing Methodology & Evidence
 
-This document outlines the testing strategy, design of the mock execution
-environment, and the test evidence for AGY-Shim. Repository paths are relative
-to the checkout root unless stated otherwise.
+> **TL;DR:** This is the developer evidence and methodology document. The
+> automated suite is deterministic, offline, and mock-based. Users looking for
+> commands and live validation prompts should start with
+> [TESTING.md](../TESTING.md).
+
+Repository paths are relative to the checkout root unless stated otherwise.
 
 ---
 
@@ -22,6 +25,11 @@ Relying on live cloud model APIs for automated E2E tests introduces flakiness (d
 These tests validate the bridge behavior expected by Clairvoyance; they are
 not a general ACP conformance suite. Compatibility with another ACP host must
 be recorded separately against that host and version.
+
+Graphify is not required by the automated suite or the live bridge. Optional
+Graphify-assisted agent testing requires a separate user-level installation;
+see [graphify.md](graphify.md). A missing Graphify installation is recorded as
+not applicable, not as an AGY-Shim test failure.
 
 ## Continuous Integration
 
@@ -186,4 +194,3 @@ No other ACP host is covered by this evidence record.
 [TEST-RUNNER] ALL TESTS COMPLETED SUCCESSFULLY!
 ==================================================
 ```
-

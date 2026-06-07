@@ -38,7 +38,7 @@ sequenceDiagram
 
 ## 2. File Inventory
 The workspace contains the following files:
-* **Command Wrappers:** [copilot.cmd](../../bin/copilot.cmd), [cursor.cmd](../../bin/cursor.cmd), [gemini.cmd](../../bin/gemini.cmd), [claude.cmd](../../bin/claude.cmd), [codex.cmd](../../bin/codex.cmd) — Entry points directing calls to the Python shim with identity arguments.
+* **Command Wrappers:** [copilot.cmd](../../bin/copilot/copilot.cmd), [cursor.cmd](../../bin/cursor/cursor.cmd), [gemini.cmd](../../bin/gemini/gemini.cmd), [claude.cmd](../../bin/claude/claude.cmd), [codex.cmd](../../bin/codex/codex.cmd) — Entry points directing calls to the Python shim with identity arguments.
 * **Core Implementation:** [gemini_shim.py](../../src/agy_shim/main.py) — coordinates ACP protocol parsing, session persistence, SQLite delta scanning, and subprocess execution.
 * **Test Suite:** [test_shim.py](../../tests/test_e2e.py) — E2E test runner validating LSP headers, session creation, and conversation memory.
 * **Excluded Reference Material:** `openab_main.rs` was inspected during the review but was not used by the shim and was removed before distribution.

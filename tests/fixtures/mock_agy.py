@@ -11,6 +11,7 @@ import os
 import sqlite3
 import uuid
 import time
+import json
 
 def make_step_payload(text):
     text_bytes = text.encode('utf-8')
@@ -60,6 +61,12 @@ def main():
             time.sleep(1.0)
             
     user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
+    with open(os.path.join(user_profile, "mock_invocation.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "args": args,
+            "cwd": os.getcwd(),
+            "secret_inherited": "AGY_TEST_PARENT_SECRET" in os.environ,
+        }, f)
     conversations_dir = os.path.join(user_profile, ".gemini", "antigravity-cli", "conversations")
     os.makedirs(conversations_dir, exist_ok=True)
     

@@ -7,10 +7,12 @@ dist/
 *.log.bak
 logs/
 out.txt
-AGENTS.md
 archive/
 
 # Local AI workspace memory and runtime state
 .clairvoyance/
 .Clairvoyance/
 .gemini/
+
+# Local Graphify index generated for agent navigation
+graphify-out/
