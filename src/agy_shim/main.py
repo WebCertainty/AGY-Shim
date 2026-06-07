@@ -724,8 +724,22 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
             )
                 
     try:
+        loop_counter = 0
         while not stop_event.is_set():
             check_and_send(is_final=False)
+            
+            loop_counter += 1
+            if loop_counter % 10 == 0:
+                err_msg = check_agy_logs_for_error(conversations_dir)
+                if err_msg:
+                    log_event("realtime_quota_exhaustion_detected", error=err_msg)
+                    send_update_notification(session_id, f"\n\n[Shim Warning] {err_msg}\n")
+                    with active_processes_lock:
+                        proc = active_processes.get(session_id)
+                        if proc and proc.poll() is None:
+                            log_event("realtime_subprocess_termination", session=opaque_id(session_id))
+                            proc.terminate()
+                            
             time.sleep(0.2)
             
         # Do one last check before exiting
@@ -998,6 +1012,22 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         # Sleep a bit to allow SQLite to finish writing
         time.sleep(0.5)
         
+        # Stop and join the polling thread BEFORE reading final states to prevent index race conditions
+        stop_event.set()
+        poll_thread.join(timeout=2.0)
+        
+        final_conv_id = holder.get()
+        final_last_step_idx = holder.get_last_step_idx()
+        
+        if final_conv_id:
+            session_store.save_session(session_id, final_conv_id, final_last_step_idx)
+            log_event(
+                "session_saved",
+                session=opaque_id(session_id),
+                conversation=opaque_id(final_conv_id),
+                step=final_last_step_idx,
+            )
+            
         if proc.returncode != 0:
             with cancellation_events_lock:
                 is_cancelled = cancellation_events.get(session_id, False)
@@ -1023,22 +1053,6 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                     "message": err_msg
                 }
             }
-            
-        # Stop and join the polling thread BEFORE reading final states to prevent index race conditions
-        stop_event.set()
-        poll_thread.join(timeout=2.0)
-        
-        final_conv_id = holder.get()
-        final_last_step_idx = holder.get_last_step_idx()
-        
-        if final_conv_id:
-            session_store.save_session(session_id, final_conv_id, final_last_step_idx)
-            log_event(
-                "session_saved",
-                session=opaque_id(session_id),
-                conversation=opaque_id(final_conv_id),
-                step=final_last_step_idx,
-            )
             
             if final_last_step_idx <= last_step_idx:
                 err_msg = check_agy_logs_for_error(conversations_dir)
