@@ -5,6 +5,11 @@
 >
 > This repository provides an experimental Windows-only shim to bridge Antigravity (agy.exe) to ACP hosts for short-term evaluation. See the Rationale and Security sections below before using.
 
+## Major Updates (Version 0.2.0)
+
+- **Path Backslash & Escape Fixes**: Standardized character escaping for Windows paths (`\` and `\\`) and Python double underscores (`__`) inside agent outputs so they render correctly in Stardock Clairvoyance without formatting loss or markdown breakage.
+- **Provider Wrapper Isolation**: Relocated provider wrappers (e.g. `cursor`, `gemini`, etc.) to individual `bin/<provider>/` subdirectories to prevent PATH conflicts or shadowing other genuine CLIs on the system.
+- **Improved Installation Script**: Completely rewrote `setup_agy_shim.ps1` to support automated/interactive installs with conflict detection, session vs permanent scope configuration, status verification (`-Action Verify`), and complete rollback (`-Action Uninstall`).
 
 AGY-Shim is an experimental Windows bridge that exposes the Antigravity CLI
 (`agy.exe`) through an Agent Client Protocol (ACP) JSON-RPC interface.
@@ -131,27 +136,104 @@ The shim searches for `agy.exe` using:
 3. `%LOCALAPPDATA%\agy\bin\agy.exe`
 4. `%USERPROFILE%\AppData\Local\agy\bin\agy.exe`
 
-### IMPORTANT — Setup script (read before running)
+### Recommended: Automated Installation Script (Recommended)
 
-> **WARNING:** A PowerShell helper script is available at [scripts/setup_agy_shim.ps1](/scripts) to clone/update the repository, configure session environment variables (it prompts to enable AGY_SHIM_ALLOW_BYPASS), and perform basic verification. **THIS SCRIPT HAS NOT BEEN UNIVERSALLY TESTED.**
->
-> Use ONLY in isolated test VMs or ephemeral accounts. Do NOT enable AGY_SHIM_ALLOW_BYPASS on production or sensitive machines. Inspect the script before running; verify the agy.exe path and that prepending the repo's bin to PATH is acceptable in your environment.
+A PowerShell helper script is available at `scripts/setup_agy_shim.ps1` to automatically configure, verify, and uninstall the shim in both User (permanent) and Session (temporary) scopes. It isolates each provider wrapper in its own directory to prevent shadowing genuine CLIs you have installed.
 
-## Installation
+> [!WARNING]
+> Use ONLY in isolated test VMs or ephemeral accounts. Do NOT enable `AGY_SHIM_ALLOW_BYPASS` on production or sensitive machines. Inspect the script before running; verify the `agy.exe` path and that prepending the repo's provider bin directory to your PATH is acceptable in your environment.
 
-Clone the repository and add its `bin` directory to `PATH` only in an isolated
-review environment.
+#### Usage:
+- **Interactive Setup Wizard (Recommended)**:
+  Running the script without parameters launches a step-by-step interactive wizard. It will guide you through selecting the action (Install, Verify, Uninstall), scope (Permanent/User, Temporary/Session), provider identity (detecting and warning about conflicts), and the required permission bypass security opt-in.
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
+  ```
+- **Silent/Bypass Permanent Install** (non-interactive / scriptable, e.g. for `cursor`):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Install -Scope User -Provider cursor -Bypass
+  ```
+- **Status Verification**:
+  Verifies environment variables and PATH precedence for all shimmable providers.
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Verify
+  ```
+- **Complete Uninstall (Rollback)**:
+  Cleanly removes all AGY-Shim provider directories from your PATH and deletes environment variables from both User registry and the current session.
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Uninstall -Scope User
+  ```
+
+---
+
+### Alternative: Manual Configuration
+
+If you prefer to configure the shim manually, follow the options below. **Note: You must target the specific provider-specific subfolder (e.g., `bin/cursor`) to avoid shadowing other genuine CLIs on your system.**
+
+#### Option A: Temporary PowerShell Session PATH (for testing/CLI-only)
+
+This sets the variables only in the current PowerShell terminal session. Replace `cursor` with your chosen provider wrapper.
 
 ```powershell
-git clone https://github.com/WebCertainty/AGY-Shim.git
-cd agy-shim
 $env:AGY_PATH = "$env:LOCALAPPDATA\agy\bin\agy.exe"
 $env:AGY_SHIM_ALLOW_BYPASS = "1"
-$env:PATH = "$PWD\bin;$env:PATH"
+$env:PATH = "$PWD\bin\cursor;$env:PATH"
+```
+
+#### Option B: Permanent User PATH (required for GUI hosts like Clairvoyance)
+
+If you launch Clairvoyance from the desktop, Start Menu, or outside the temporary PowerShell window, it inherits your permanent User environment variables rather than temporary session ones.
+
+1. **Prepend the provider-specific `bin` subfolder to your permanent User `PATH`:**
+   ```powershell
+   $provider = "cursor" # <-- Replace with the provider you want to shim (e.g., cursor, gemini, copilot)
+   $shimBin = "C:\Path\To\agy-shim\bin\$provider" # <-- Replace with your actual absolute path
+   $oldPath = [Environment]::GetEnvironmentVariable("Path", "User")
+   if ($oldPath -notlike "*$shimBin*") {
+       [Environment]::SetEnvironmentVariable("Path", "$shimBin;$oldPath", "User")
+   }
+   ```
+2. **Set the bypass flag permanently:**
+   ```powershell
+   [Environment]::SetEnvironmentVariable("AGY_SHIM_ALLOW_BYPASS", "1", "User")
+   ```
+3. **Restart your GUI host application** (or any active terminal) for the new environment variables to take effect.
+
+#### Manual Verification (Run in a new PowerShell window)
+
+To verify that the permanent changes were applied correctly before running Clairvoyance, open a new PowerShell window and run:
+
+```powershell
+# 1. Confirm that the shim wrapper is detected first on your PATH
+where.exe cursor
+
+# 2. Confirm that the bypass environment variable is set
+$env:AGY_SHIM_ALLOW_BYPASS
+```
+
+*Expected output:*
+- The `where.exe` command should list the path to the shim's provider-specific folder first (e.g., `C:\Path\To\agy-shim\bin\cursor\cursor.exe` or `.cmd`).
+- The `$env:AGY_SHIM_ALLOW_BYPASS` command should print `1`.
+
+#### Manual Rollback (To undo these changes permanently)
+
+If you need to remove the shim and restore your previous configuration, open a PowerShell window and run:
+
+```powershell
+# 1. Remove the shim bin folder from your permanent User PATH
+$provider = "cursor"
+$shimBin = "C:\Path\To\agy-shim\bin\$provider"
+$oldPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$newPath = ($oldPath -split ";" | Where-Object { $_ -ne $shimBin -and $_ -ne "" }) -join ";"
+[Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+
+# 2. Remove the bypass environment variable
+[Environment]::SetEnvironmentVariable("AGY_SHIM_ALLOW_BYPASS", $null, "User")
 ```
 
 Do not place the repository ahead of genuine provider CLIs in a production
-`PATH` without understanding the executable-shadowing implications.
+PATH without understanding the executable-shadowing implications.
+
 
 ### Important: Do Not Use Host Sign-In or Update Controls
 

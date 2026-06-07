@@ -32,6 +32,46 @@ def verify_platform():
         raise OSError("AGY-Shim is Windows-only. Unsupported platform.")
 
 
+PROVIDER_MODELS = {
+    "gemini": {
+        "availableModels": [
+            {"modelId": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "description": "Google Gemini 1.5 Pro"},
+            {"modelId": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "description": "Google Gemini 1.5 Flash"}
+        ],
+        "currentModelId": "gemini-1.5-pro"
+    },
+    "claude": {
+        "availableModels": [
+            {"modelId": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "description": "Anthropic Claude 3.5 Sonnet"},
+            {"modelId": "claude-3-opus", "name": "Claude 3 Opus", "description": "Anthropic Claude 3 Opus"}
+        ],
+        "currentModelId": "claude-3-5-sonnet"
+    },
+    "copilot": {
+        "availableModels": [
+            {"modelId": "gpt-4o", "name": "GPT-4o", "description": "OpenAI GPT-4o"},
+            {"modelId": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "description": "Anthropic Claude 3.5 Sonnet"}
+        ],
+        "currentModelId": "gpt-4o"
+    },
+    "codex": {
+        "availableModels": [
+            {"modelId": "gpt-4o", "name": "GPT-4o", "description": "OpenAI GPT-4o"},
+            {"modelId": "gpt-4", "name": "GPT-4", "description": "OpenAI GPT-4"}
+        ],
+        "currentModelId": "gpt-4o"
+    },
+    "cursor": {
+        "availableModels": [
+            {"modelId": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "description": "Anthropic Claude 3.5 Sonnet"},
+            {"modelId": "gpt-4o", "name": "GPT-4o", "description": "OpenAI GPT-4o"},
+            {"modelId": "gpt-4", "name": "GPT-4", "description": "OpenAI GPT-4"}
+        ],
+        "currentModelId": "claude-3-5-sonnet"
+    }
+}
+
+
 # Keep generated runtime logs together when running from a checkout.
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(PACKAGE_DIR))
@@ -85,7 +125,7 @@ def log_event(event, **fields):
             "session/set_model",
             "shutdown",
         }
-        safe_string_fields = {"conversation", "error", "method", "session"}
+        safe_string_fields = {"conversation", "error", "method", "session", "command"}
         for key, value in sorted(fields.items()):
             safe_key = re.sub(r"[^a-z0-9_]", "_", str(key).lower())[:32]
             if isinstance(value, bool):
@@ -164,6 +204,78 @@ def write_message(msg_dict):
             sys.stdout.buffer.flush()
     except Exception as e:
         log_event("message_write_failed", error=error_category(e))
+
+def escape_plain_text_backslashes(text):
+    result = []
+    i = 0
+    n = len(text)
+    
+    # State variables
+    in_fence = None  # Can be '```' or '~~~'
+    in_inline = False
+    
+    while i < n:
+        # Check for fenced code block start/end
+        if not in_inline:
+            if in_fence:
+                # Look for closing fence
+                fence_len = len(in_fence)
+                if text[i:i+fence_len] == in_fence:
+                    result.append(in_fence)
+                    i += fence_len
+                    in_fence = None
+                    continue
+            else:
+                # Look for opening fence
+                if text[i:i+3] == '```':
+                    result.append('```')
+                    i += 3
+                    in_fence = '```'
+                    continue
+                elif text[i:i+3] == '~~~':
+                    result.append('~~~')
+                    i += 3
+                    in_fence = '~~~'
+                    continue
+                    
+        # Check for inline code start/end
+        if not in_fence:
+            if in_inline:
+                if text[i] == '`':
+                    result.append('`')
+                    i += 1
+                    in_inline = False
+                    continue
+            else:
+                if text[i] == '`':
+                    result.append('`')
+                    i += 1
+                    in_inline = True
+                    continue
+                    
+        # If we are in code, just append character
+        if in_fence or in_inline:
+            result.append(text[i])
+            i += 1
+        else:
+            # We are in plain text. Check if this is a backslash or double underscore to escape.
+            if text[i] == '\\':
+                # Check lookahead for punctuation character
+                if i + 1 < n and text[i+1] in '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~':
+                    result.append('\\\\')
+                else:
+                    result.append('\\')
+                i += 1
+            elif text[i:i+2] == '__':
+                # Escape double underscores to prevent markdown bold rendering
+                result.append(r'\_\_')
+                i += 2
+            else:
+                result.append(text[i])
+                i += 1
+            
+    return "".join(result)
+
 
 class SessionStore:
     def __init__(self):
@@ -489,6 +601,7 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
             res = read_response_from_db(conversations_dir, conv_id, initial_last_idx)
             if res:
                 text, max_idx = res
+                text = escape_plain_text_backslashes(text)
                 max_idx_seen = max(max_idx_seen, max_idx)
                 if text.startswith(sent_text):
                     delta = text[len(sent_text):]
@@ -656,6 +769,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         session=opaque_id(session_id),
         continuing=bool(conversation_id),
         prompt_chars=len(prompt_text),
+        command=prompt_text[:100],  # Temporarily log prompt text using the whitelisted command field
     )
     
     stop_event = threading.Event()
@@ -789,7 +903,9 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                         "message": "Error: prompt execution cancelled."
                     }
                 }
-            err_msg = f"agy.exe exited with non-zero code {proc.returncode}"
+            err_msg = check_agy_logs_for_error(conversations_dir)
+            if not err_msg:
+                err_msg = f"agy.exe exited with non-zero code {proc.returncode}"
             log_event("subprocess_failed", exit_code=proc.returncode)
             return {
                 "jsonrpc": "2.0",
@@ -821,23 +937,49 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                 if err_msg:
                     log_event("agy_error_detected")
                     send_update_notification(session_id, err_msg)
+                    return {
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {
+                            "code": -32000,
+                            "message": err_msg
+                        }
+                    }
                 else:
                     stdout_text = "".join(stdout_lines).strip()
                     if stdout_text:
+                        stdout_text = escape_plain_text_backslashes(stdout_text)
                         send_update_notification(session_id, stdout_text)
                     else:
-                        send_update_notification(session_id, "Error: The agent completed the turn but produced no output. Please check the local agy logs.")
+                        err_msg = "Error: The agent completed the turn but produced no output. Please check the local agy logs."
+                        send_update_notification(session_id, err_msg)
+                        return {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {
+                                "code": -32000,
+                                "message": err_msg
+                            }
+                        }
         else:
             stdout_text = "".join(stdout_lines).strip()
             if stdout_text:
+                stdout_text = escape_plain_text_backslashes(stdout_text)
                 log_event("stdout_fallback_used", chars=len(stdout_text))
                 send_update_notification(session_id, stdout_text)
             else:
                 err_msg = check_agy_logs_for_error(conversations_dir)
-                if err_msg:
-                    send_update_notification(session_id, err_msg)
-                else:
-                    send_update_notification(session_id, "Error: The agent returned an empty response. Please check the local agy logs.")
+                if not err_msg:
+                    err_msg = "Error: The agent returned an empty response. Please check the local agy logs."
+                send_update_notification(session_id, err_msg)
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {
+                        "code": -32000,
+                        "message": err_msg
+                    }
+                }
                 
         return {
             "jsonrpc": "2.0",
@@ -932,6 +1074,24 @@ def main():
         elif arg in ("--help", "-h", "help"):
             print(f"Gemini ACP Shim (Masquerading as {provider})")
             sys.exit(0)
+        elif "acp" in arg:
+            # Consume the acp command and proceed to the JSON-RPC loop
+            args = args[1:]
+        else:
+            # Handle specific CLI subcommands queried by Clairvoyance
+            if arg in ("status", "whoami"):
+                print("Logged in as user")
+                sys.exit(0)
+            elif arg in ("models", "--list-models", "--model", "-m"):
+                # Print available models for the provider
+                provider_models = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["cursor"])
+                for model in provider_models["availableModels"]:
+                    print(model["modelId"])
+                sys.exit(0)
+            else:
+                # Mock success for other subcommands (e.g. "mcp", "about") to prevent hanging on stdin
+                log_event("cli_subcommand_ignored", command=arg)
+                sys.exit(0)
             
     try:
         verify_platform()
@@ -971,12 +1131,20 @@ def main():
             if workspace_path:
                 session_store.set_workspace(workspace_path)
                 
+            versions = {
+                "copilot": "1.0.59",
+                "claude": "2.1.165",
+                "codex": "0.137.0",
+                "gemini": "0.45.1",
+                "cursor": "1.0.0"
+            }
+            provider_version = versions.get(provider, "1.0.0")
             resp = {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
                     "protocolVersion": 1,
-                    "agentInfo": {"name": f"agy-shim-{provider}", "version": "1.0.0"},
+                    "agentInfo": {"name": f"agy-shim-{provider}", "version": provider_version},
                     "agentCapabilities": {"streaming": True, "loadSession": True}
                 }
             }
@@ -984,11 +1152,13 @@ def main():
         elif method == "session/new":
             session_id = str(uuid.uuid4())
             session_store.save_session(session_id, None, -1)
+            provider_models = PROVIDER_MODELS.get(provider, PROVIDER_MODELS["cursor"])
             resp = {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
-                    "sessionId": session_id
+                    "sessionId": session_id,
+                    "models": provider_models
                 }
             }
             write_message(resp)

@@ -256,6 +256,7 @@ def test_bypass_enforcement():
     shim_env["AGY_SHIM_LOG_FILE"] = log_path
     shim_env["USERPROFILE"] = profile_dir
     # Note: AGY_SHIM_ALLOW_BYPASS is intentionally NOT set
+    shim_env.pop("AGY_SHIM_ALLOW_BYPASS", None)
     
     proc = subprocess.Popen(
         [sys.executable, SHIM_FILE],
@@ -585,6 +586,135 @@ def test_cancellation():
         proc.wait()
         runtime_dir.cleanup()
 
+def test_error_propagation():
+    log("Running error propagation test...")
+    runtime_dir = tempfile.TemporaryDirectory()
+    log_path = os.path.join(runtime_dir.name, "logs", "shim.log")
+    profile_dir = os.path.join(runtime_dir.name, "profile")
+    workspace_dir = os.path.join(runtime_dir.name, "workspace")
+    os.makedirs(profile_dir)
+    os.makedirs(workspace_dir)
+    
+    # Create the fake agy log directory and write a quota error
+    agy_log_dir = os.path.join(profile_dir, ".gemini", "antigravity-cli", "log")
+    os.makedirs(agy_log_dir)
+    fake_log_file = os.path.join(agy_log_dir, "cli-20260606_210000.log")
+    with open(fake_log_file, "w", encoding="utf-8") as f:
+        f.write("E0606 21:00:00.000000 12345 log.go:398] agent executor error: RESOURCE_EXHAUSTED (code 429): Individual quota reached. Contact your administrator to enable overages. Resets in 3h28m25s.\n")
+        
+    shim_env = os.environ.copy()
+    shim_env["AGY_SHIM_LOG_FILE"] = log_path
+    shim_env["USERPROFILE"] = profile_dir
+    shim_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
+    # We will point AGY_PATH to a mock that exits with code 0 without writing any database steps
+    fake_cmd = os.path.join(runtime_dir.name, "fake_agy.cmd")
+    with open(fake_cmd, "w", encoding="utf-8") as f:
+        f.write("@exit /b 0\n")
+    shim_env["AGY_PATH"] = fake_cmd
+    
+    proc = subprocess.Popen(
+        [sys.executable, SHIM_FILE],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+        env=shim_env,
+    )
+    
+    try:
+        # 1. Initialize
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": 1,
+                "clientInfo": {"name": "test-runner", "version": "1.0.0"},
+                "rootUri": Path(workspace_dir).as_uri(),
+            }
+        }).encode('utf-8') + b"\n")
+        proc.stdout.readline()
+        
+        # 2. session/new
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "session/new",
+            "params": {}
+        }).encode('utf-8') + b"\n")
+        resp2 = json.loads(proc.stdout.readline().strip().decode('utf-8'))
+        session_id = resp2["result"]["sessionId"]
+        
+        # 3. session/prompt (should fail with the quota error from log)
+        proc.stdin.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "session/prompt",
+            "params": {
+                "sessionId": session_id,
+                "prompt": [{"type": "text", "text": "This should fail"}]
+            }
+        }).encode('utf-8') + b"\n")
+        
+        resp3 = None
+        while True:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            msg = json.loads(line.strip().decode('utf-8'))
+            if msg.get("id") == 3:
+                resp3 = msg
+                break
+                
+        assert resp3 is not None
+        assert "error" in resp3, "Expected error response in JSON-RPC"
+        assert resp3["error"]["code"] == -32000
+        assert "RESOURCE_EXHAUSTED" in resp3["error"]["message"] or "Quota Exhausted" in resp3["error"]["message"]
+        log("Error propagation test passed.")
+        
+    finally:
+        proc.terminate()
+        proc.wait()
+        runtime_dir.cleanup()
+
+def test_subcommands():
+    log("Running subcommand mock tests...")
+    # Test status subcommand
+    proc1 = subprocess.Popen(
+        [sys.executable, SHIM_FILE, "--provider", "cursor", "status"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdout1, _ = proc1.communicate()
+    assert proc1.returncode == 0
+    assert "Logged in as user" in stdout1
+    
+    # Test models subcommand
+    proc2 = subprocess.Popen(
+        [sys.executable, SHIM_FILE, "--provider", "cursor", "models"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdout2, _ = proc2.communicate()
+    assert proc2.returncode == 0
+    assert "claude-3-5-sonnet" in stdout2
+    assert "gpt-4o" in stdout2
+    
+    # Test --list-models subcommand
+    proc3 = subprocess.Popen(
+        [sys.executable, SHIM_FILE, "--provider", "cursor", "--list-models"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdout3, _ = proc3.communicate()
+    assert proc3.returncode == 0
+    assert "claude-3-5-sonnet" in stdout3
+    
+    log("Subcommand mock tests passed.")
+
 def main():
     # Test raw newline-delimited mode
     run_test_with_framing(use_lsp=False)
@@ -596,6 +726,8 @@ def main():
     test_bypass_enforcement()
     test_concurrency_and_slot_release()
     test_cancellation()
+    test_error_propagation()
+    test_subcommands()
     
     log("\n==================================================")
     log("ALL TESTS COMPLETED SUCCESSFULLY!")
