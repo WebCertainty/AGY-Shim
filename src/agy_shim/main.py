@@ -770,7 +770,7 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
             if loop_counter % 10 == 0:
                 err_msg = check_agy_logs_for_error(conversations_dir)
                 if err_msg:
-                    log_event("realtime_quota_exhaustion_detected", error=err_msg)
+                    log_event("realtime_agy_error_detected", error=err_msg)
                     send_update_notification(session_id, f"\n\n[Shim Warning] {err_msg}\n")
                     with active_processes_lock:
                         proc = active_processes.get(session_id)
@@ -806,7 +806,33 @@ def check_agy_logs_for_error(conversations_dir):
             
         with open(latest_log, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()[-100:]
-            
+
+        auth_error_markers = (
+            "You are not logged into Antigravity",
+            "not authenticated",
+        )
+        auth_success_markers = (
+            "authenticated successfully",
+            "silent auth succeeded",
+            "authenticated via keyring",
+        )
+        last_auth_error = max(
+            (
+                index
+                for index, line in enumerate(lines)
+                if any(marker in line for marker in auth_error_markers)
+            ),
+            default=-1,
+        )
+        last_auth_success = max(
+            (
+                index
+                for index, line in enumerate(lines)
+                if any(marker in line for marker in auth_success_markers)
+            ),
+            default=-1,
+        )
+
         for line in reversed(lines):
             if "RESOURCE_EXHAUSTED" in line:
                 hit_time_str = "unknown"
@@ -859,8 +885,8 @@ def check_agy_logs_for_error(conversations_dir):
                     time_info += f"Reset target: {reset_target_str} (in {resets_in}). "
                 
                 return f"Error: Antigravity API Quota Exhausted (429). {time_info}Please check your AI Credit limits or wait for the quota window to reset."
-            if "You are not logged into Antigravity" in line or "not authenticated" in line:
-                return "Error: Not logged into Antigravity. Please run the login command in the IDE/CLI."
+        if last_auth_error > last_auth_success:
+            return "Error: Not logged into Antigravity. Please run the login command in the IDE/CLI."
         return None
     except Exception as e:
         log_event("agy_log_check_failed", error=error_category(e))
