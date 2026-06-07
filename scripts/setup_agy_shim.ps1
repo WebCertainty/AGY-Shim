@@ -338,14 +338,36 @@ if (-not $Provider) {
     
     # Add not installed first (Recommended)
     foreach ($p in $notInstalledList) {
-        Write-Host "  [$index] $p (Not Installed - RECOMMENDED)" -ForegroundColor Green
+        $recText = "Not Installed"
+        if ($p -eq "gemini" -or $p -eq "copilot") {
+            $recText += " - RECOMMENDED & CONFIRMED WORKING"
+            $color = "Green"
+        } elseif ($p -eq "cursor") {
+            $recText += " - CONFIRMED NOT WORKING"
+            $color = "Red"
+        } else {
+            $recText += " - NOT VERIFIED"
+            $color = "Gray"
+        }
+        Write-Host "  [$index] $p ($recText)" -ForegroundColor $color
         $menuItems += $p
         $index++
     }
     
     # Add installed second
     foreach ($p in $installedList) {
-        Write-Host "  [$index] $p (Currently Installed - Warning: Selecting this will override your genuine CLI)" -ForegroundColor Yellow
+        $warnText = "Currently Installed - Warning: Overrides genuine CLI"
+        if ($p -eq "gemini" -or $p -eq "copilot") {
+            $warnText += " (CONFIRMED WORKING)"
+            $color = "Yellow"
+        } elseif ($p -eq "cursor") {
+            $warnText += " (CONFIRMED NOT WORKING)"
+            $color = "Red"
+        } else {
+            $warnText += " (NOT VERIFIED)"
+            $color = "Yellow"
+        }
+        Write-Host "  [$index] $p ($warnText)" -ForegroundColor $color
         $menuItems += $p
         $index++
     }
@@ -357,6 +379,23 @@ if (-not $Provider) {
         $Provider = $menuItems[[int]$selection - 1]
     } else {
         Write-Host "Invalid selection. Aborting installation." -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Warn about Cursor or unverified providers
+if ($Provider -eq "cursor") {
+    Write-Host "`nWARNING: The Cursor shim has known integration issues with Stardock Clairvoyance and does not work." -ForegroundColor Red
+    $confirmCursor = Read-Host "Proceed with Cursor installation anyway? (Y/N) [N]"
+    if ($confirmCursor -ne "Y" -and $confirmCursor -ne "y") {
+        Write-Host "Installation aborted." -ForegroundColor Red
+        exit 1
+    }
+} elseif ($Provider -notin @("gemini", "copilot")) {
+    Write-Host "`nWARNING: The selected shim ($Provider) has not been verified to work. Only Gemini and Copilot are confirmed working." -ForegroundColor Yellow
+    $confirmUnverified = Read-Host "Proceed anyway? (Y/N) [Y]"
+    if ($confirmUnverified -eq "N" -or $confirmUnverified -eq "n") {
+        Write-Host "Installation aborted." -ForegroundColor Red
         exit 1
     }
 }

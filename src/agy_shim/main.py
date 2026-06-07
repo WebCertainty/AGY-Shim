@@ -769,7 +769,6 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
         session=opaque_id(session_id),
         continuing=bool(conversation_id),
         prompt_chars=len(prompt_text),
-        command=prompt_text[:100],  # Temporarily log prompt text using the whitelisted command field
     )
     
     stop_event = threading.Event()

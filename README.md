@@ -55,7 +55,10 @@ AGY-Shim should currently be described as **an experimental ACP bridge for
 Antigravity, tested with Clairvoyance**, rather than a universally compatible
 ACP implementation.
 
-**v0.1 testing scope:** End-to-end testing with Stardock Clairvoyance was performed using the Copilot compatibility wrapper. The other provider wrappers passed version-detection checks only; their host integration has not been verified.
+**Confirmed Providers (v0.2.0):**
+* **Gemini** and **Copilot** shims are the only identities confirmed as fully working with Stardock Clairvoyance.
+* **Cursor** is confirmed as **not working** due to integration issues encountered during active testing. Do not use the Cursor identity.
+* **Claude** and **Codex** wrappers have passed version-detection checks only; their active host integration has not been verified.
 
 The host-independent surface includes JSON-RPC over standard input/output,
 session lifecycle methods, streaming updates, and cancellation. The
