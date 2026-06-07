@@ -341,10 +341,10 @@ if (-not $Provider) {
     foreach ($p in $notInstalledList) {
         $recText = "Not Installed"
         if ($p -eq "gemini" -or $p -eq "copilot") {
-            $recText += " - RECOMMENDED & CONFIRMED WORKING"
+            $recText += " - ACTIVE EVALUATION"
             $color = "Green"
         } elseif ($p -eq "cursor") {
-            $recText += " - CONFIRMED NOT WORKING"
+            $recText += " - HOST VALIDATION REQUIRED"
             $color = "Red"
         } else {
             $recText += " - NOT VERIFIED"
@@ -359,10 +359,10 @@ if (-not $Provider) {
     foreach ($p in $installedList) {
         $warnText = "Currently Installed - Warning: Overrides genuine CLI"
         if ($p -eq "gemini" -or $p -eq "copilot") {
-            $warnText += " (CONFIRMED WORKING)"
+            $warnText += " (ACTIVE EVALUATION)"
             $color = "Yellow"
         } elseif ($p -eq "cursor") {
-            $warnText += " (CONFIRMED NOT WORKING)"
+            $warnText += " (HOST VALIDATION REQUIRED)"
             $color = "Red"
         } else {
             $warnText += " (NOT VERIFIED)"
@@ -384,16 +384,16 @@ if (-not $Provider) {
     }
 }
 
-# Warn about Cursor or unverified providers
+# Warn that provider identities require host-specific validation
 if ($Provider -eq "cursor") {
-    Write-Host "`nWARNING: The Cursor shim has known integration issues with Stardock Clairvoyance and does not work." -ForegroundColor Red
+    Write-Host "`nWARNING: The Cursor identity has not passed current live-host validation." -ForegroundColor Yellow
     $confirmCursor = Read-Host "Proceed with Cursor installation anyway? (Y/N) [N]"
     if ($confirmCursor -ne "Y" -and $confirmCursor -ne "y") {
         Write-Host "Installation aborted." -ForegroundColor Red
         exit 1
     }
 } elseif ($Provider -notin @("gemini", "copilot")) {
-    Write-Host "`nWARNING: The selected shim ($Provider) has not been verified to work. Only Gemini and Copilot are confirmed working." -ForegroundColor Yellow
+    Write-Host "`nWARNING: The selected identity ($Provider) has version-detection evidence only; live-host interoperability is not confirmed." -ForegroundColor Yellow
     $confirmUnverified = Read-Host "Proceed anyway? (Y/N) [Y]"
     if ($confirmUnverified -eq "N" -or $confirmUnverified -eq "n") {
         Write-Host "Installation aborted." -ForegroundColor Red

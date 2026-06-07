@@ -34,9 +34,23 @@ python tests\test_e2e.py
 python -m pip install --no-deps .
 ```
 
+When `scripts/launcher.cs` changes, rebuild the provider executables with
+`scripts/build_launchers.ps1`, verify both `.exe` and `.cmd` version output,
+and include the source change and rebuilt binaries in the same pull request.
+
 The default end-to-end test uses the deterministic local mock agent. Any live
 Antigravity test must be identified separately because it can consume quota
 and modify conversation state.
+
+### Optional Graphify Workflow
+
+Graphify is optional and is not installed with AGY-Shim. Contributors who want
+graph-assisted navigation should follow [docs/graphify.md](docs/graphify.md).
+Do not commit `graphify-out/`, generated Graphify skills, caches, reports, MCP
+configuration, or `.git/hooks`.
+
+If Graphify is not installed, use targeted search and bounded source reads.
+Missing Graphify must not block normal development or pull-request checks.
 
 ## Pull Requests
 
@@ -50,7 +64,8 @@ A pull request should include:
 - documentation changes, when behavior changed.
 
 Do not commit logs, conversation databases, session state, credentials,
-generated output, or local environment configuration.
+generated output, local environment configuration, or generated Graphify
+artifacts.
 
 ## Review Standard
 

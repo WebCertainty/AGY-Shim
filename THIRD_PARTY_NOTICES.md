@@ -1,5 +1,14 @@
 # Third-Party Notices
 
+## Optional Development Tools
+
+Graphify is supported as an optional, separately installed development tool.
+It is not bundled with AGY-Shim and is not an AGY-Shim runtime dependency.
+Graphify remains subject to its own license and distribution terms.
+
+- Project: https://github.com/safishamsi/graphify
+- License: MIT
+
 ## gstack
 
 The review-method documents `docs/reviews/cso-checklist.md` and
@@ -34,3 +43,6 @@ Antigravity and the provider names used by the compatibility wrappers are the
 property of their respective owners. Their appearance in this repository
 describes interoperability targets and does not imply endorsement,
 certification, or affiliation.
+
+The checked-in provider `.exe` launchers are compiled from this repository's
+own `scripts/launcher.cs`; they are not third-party provider binaries.

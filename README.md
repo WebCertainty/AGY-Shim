@@ -35,7 +35,7 @@ Known review areas include:
 
 - subprocess lifecycle and cancellation;
 - use of `--dangerously-skip-permissions`;
-- inherited environment variables and credentials;
+- child-process environment compatibility after credential filtering;
 - executable discovery and provider masquerading;
 - reliance on Antigravity's internal SQLite and protobuf formats;
 - log retention and sensitive-data handling;
@@ -55,10 +55,10 @@ AGY-Shim should currently be described as **an experimental ACP bridge for
 Antigravity, tested with Clairvoyance**, rather than a universally compatible
 ACP implementation.
 
-**Confirmed Providers (v0.2.0):**
-* **Gemini** and **Copilot** shims are the only identities confirmed as fully working with Stardock Clairvoyance.
-* **Cursor** is confirmed as **not working** due to integration issues encountered during active testing. Do not use the Cursor identity.
-* **Claude** and **Codex** wrappers have passed version-detection checks only; their active host integration has not been verified.
+**Provider evidence (v0.2.0):**
+* All five primary wrappers pass version-detection checks.
+* The deterministic test harness validates the shared ACP bridge, not live host interoperability for each provider identity.
+* Copilot has the strongest manual v0.1 evidence. Gemini/AGY-Shim is under active evaluation; Claude, Codex, and Cursor require dated host-specific validation before compatibility is claimed.
 
 The host-independent surface includes JSON-RPC over standard input/output,
 session lifecycle methods, streaming updates, and cancellation. The
@@ -100,7 +100,7 @@ Clairvoyance or ACP client
           |
           | JSON-RPC 2.0 over stdio
           v
-Provider wrapper (bin/*.cmd)
+Provider wrapper (bin/<provider>/<provider>.cmd)
           |
           v
 src/agy_shim/main.py
@@ -117,15 +117,34 @@ The provider wrappers allow host applications that discover known CLI names to
 start the same shim. Provider names and version output are compatibility
 identities only; they do not turn Antigravity into those products.
 
+Each provider directory also contains a native `.exe` launcher. Some Windows
+host discovery paths resolve a provider specifically as an executable rather
+than applying interactive-shell `.cmd` lookup rules. The C# launcher provides
+that native entry point, starts the Python bridge without opening another
+console window, forwards stdin/stdout/stderr as byte streams, and returns the
+Python process exit code. It contains no ACP or Antigravity implementation.
+
+The launcher source is [scripts/launcher.cs](scripts/launcher.cs). Rebuild all
+provider executables with:
+
+```powershell
+.\scripts\build_launchers.ps1
+```
+
 More detail is in [docs/architecture.md](docs/architecture.md).
 
 ## Requirements
 
 - Windows (AGY-Shim is Windows-only and enforces this check on startup)
 - Python 3.10 or later
+- Antigravity CLI (`agy.exe`) for live prompt execution
 - Antigravity CLI installed and authenticated
 - An ACP-compatible host; currently tested with
   [Stardock Clairvoyance](https://www.clairvoyanceai.com)
+
+Graphify is an optional developer tool. It is not required to install
+or run AGY-Shim. See [docs/graphify.md](docs/graphify.md) for the separate
+installation and local-index workflow.
 
 ### Environment Variables
 
@@ -267,28 +286,36 @@ If a provider control was used accidentally:
    intended shim identity;
 4. restore the required `PATH` ordering if another CLI now takes precedence;
 5. restart the host and run its detection again;
-6. verify the wrapper with `.\bin\copilot.cmd --version`.
+6. verify the wrapper with `.\bin\copilot\copilot.cmd --version`.
 
 ## Usage
 
 The wrappers currently supported are:
 
-- `claude.cmd`
-- `codex.cmd`
-- `copilot.cmd`
-- `cursor.cmd`
-- `gemini.cmd`
+- `bin/claude/claude.exe` and `claude.cmd`
+- `bin/codex/codex.exe` and `codex.cmd`
+- `bin/copilot/copilot.exe` and `copilot.cmd`
+- `bin/cursor/cursor.exe`, `cursor-agent.exe`, and their `.cmd` fallbacks
+- `bin/gemini/gemini.exe` and `gemini.cmd`
 
 Check compatibility version output:
 
 ```powershell
-.\bin\copilot.cmd --version
+.\bin\copilot\copilot.cmd --version
 ```
 
 An ACP host starts a wrapper and communicates with it over standard input and
 output. The shim is not designed as an interactive terminal application.
 
 ## Testing
+
+See [TESTING.md](TESTING.md) for the complete automated and live validation
+regimen, including fresh-agent, cancellation, Clairvoyance Staff, and nested
+recruitment tests.
+
+Graphify is not installed by AGY-Shim. Graphify-assisted testing is optional
+and requires the separate setup documented in
+[docs/graphify.md](docs/graphify.md).
 
 Syntax validation:
 
@@ -327,6 +354,7 @@ security review is complete. Report vulnerabilities according to
 - [Architecture](docs/architecture.md)
 - [Security model](docs/security-model.md)
 - [Testing](docs/testing.md)
+- [Optional Graphify integration](docs/graphify.md)
 - [Review handoff](docs/review-handoff.md)
 - [Completed code review](docs/reviews/code-review-report.md)
 - [Implementation plan](docs/implementation-plan.md)

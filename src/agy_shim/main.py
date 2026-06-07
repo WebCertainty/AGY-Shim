@@ -160,6 +160,7 @@ log_event("shim_started")
 
 # Auto-detect LSP framing vs raw lines
 use_lsp_framing = False
+MAX_MESSAGE_SIZE = 10 * 1024 * 1024
 
 def read_message():
     global use_lsp_framing
@@ -172,9 +173,11 @@ def read_message():
         if stripped.startswith(b"Content-Length:"):
             use_lsp_framing = True
             try:
-                content_length = int(stripped.split(b":")[1].strip())
+                content_length = int(stripped.split(b":", 1)[1].strip())
             except ValueError:
-                content_length = 0
+                raise ValueError("invalid Content-Length")
+            if content_length < 0 or content_length > MAX_MESSAGE_SIZE:
+                raise ValueError("Content-Length outside allowed range")
             
             # Read header lines until empty line
             while True:
@@ -329,19 +332,35 @@ def escape_plain_text_backslashes(text):
     return "".join(result)
 
 
+def compute_safe_stream_delta(sent_text_raw, text_raw, is_final=False):
+    """Return an escaped delta only when cumulative output remains continuous."""
+    stable_raw = text_raw if is_final else get_stable_raw_text(text_raw)[0]
+    if not stable_raw.startswith(sent_text_raw):
+        return None, sent_text_raw
+
+    escaped_sent = escape_plain_text_backslashes(sent_text_raw)
+    escaped_stable = escape_plain_text_backslashes(stable_raw)
+    return escaped_stable[len(escaped_sent):], stable_raw
+
+
 class SessionStore:
     def __init__(self):
         user_profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
         self.state_dir = os.path.join(user_profile, ".gemini", "agy-acp")
         self.state_file = os.path.join(self.state_dir, "sessions.json")
         self.lock_file_path = self.state_file + ".lock"
+        self.workspace_path = None
         
     def set_workspace(self, workspace_path):
         if workspace_path and os.path.isdir(workspace_path):
             self.state_dir = os.path.join(workspace_path, ".gemini", "agy-acp")
             self.state_file = os.path.join(self.state_dir, "sessions.json")
             self.lock_file_path = self.state_file + ".lock"
+            self.workspace_path = os.path.abspath(workspace_path)
             log_event("session_store_workspace_set")
+
+    def get_workspace(self):
+        return self.workspace_path
         
     @contextlib.contextmanager
     def _lock_session(self):
@@ -514,7 +533,14 @@ def extract_text_from_step_payload(blob):
 
 # SQLite Reader
 def read_response_from_db(conversations_dir, conversation_id, after_step_idx):
-    db_path = os.path.join(conversations_dir, f"{conversation_id}.db")
+    if not isinstance(conversation_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", conversation_id):
+        log_event("conversation_id_rejected")
+        return None
+    conversations_root = Path(conversations_dir).resolve()
+    db_path = (conversations_root / f"{conversation_id}.db").resolve()
+    if db_path.parent != conversations_root:
+        log_event("conversation_path_rejected")
+        return None
     if not os.path.exists(db_path):
         return None
     conn = None
@@ -580,6 +606,25 @@ def find_agy_path():
             return default_path
             
     return "agy"
+
+
+def build_child_environment():
+    """Keep runtime essentials while excluding credentials from the child."""
+    allowed_names = {
+        "APPDATA", "COMSPEC", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS", "OS", "PATH", "PATHEXT", "PROCESSOR_ARCHITECTURE",
+        "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)", "SYSTEMDRIVE",
+        "SYSTEMROOT", "TEMP", "TMP", "USERDOMAIN", "USERNAME", "USERPROFILE",
+        "WINDIR", "AGY_MOCK_SLOW_DELAY",
+    }
+    child_env = {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() in allowed_names
+    }
+    child_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
+    return child_env
+
 
 # Directory Snapshots
 def get_conversation_snapshot(conversations_dir):
@@ -689,33 +734,26 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
                 text_raw, max_idx = res
                 max_idx_seen = max(max_idx_seen, max_idx)
                 
-                if is_final:
-                    stable_raw = text_raw
-                else:
-                    stable_raw, _ = get_stable_raw_text(text_raw)
-                    
-                if stable_raw.startswith(sent_text_raw):
-                    escaped_sent = escape_plain_text_backslashes(sent_text_raw)
-                    escaped_stable = escape_plain_text_backslashes(stable_raw)
-                    delta = escaped_stable[len(escaped_sent):]
-                    if delta:
-                        log_event(
-                            "response_delta_sent",
-                            chars=len(delta),
-                            step=max_idx,
-                        )
-                        send_update_notification(session_id, delta)
-                        sent_text_raw = stable_raw
-                else:
+                delta, next_sent_text_raw = compute_safe_stream_delta(
+                    sent_text_raw,
+                    text_raw,
+                    is_final=is_final,
+                )
+                if delta is None:
                     log_event("response_text_mismatch")
-                    escaped_text = escape_plain_text_backslashes(text_raw)
-                    escaped_sent = escape_plain_text_backslashes(sent_text_raw)
-                    if escaped_text.startswith(escaped_sent):
-                        delta = escaped_text[len(escaped_sent):]
-                        send_update_notification(session_id, delta)
-                    else:
-                        send_update_notification(session_id, escaped_text)
-                    sent_text_raw = text_raw
+                    # ACP updates are additive. Re-sending cumulative text
+                    # would duplicate visible output, so wait for a later
+                    # poll that restores the known prefix.
+                    return
+
+                if delta:
+                    log_event(
+                        "response_delta_sent",
+                        chars=len(delta),
+                        step=max_idx,
+                    )
+                    send_update_notification(session_id, delta)
+                    sent_text_raw = next_sent_text_raw
         except Exception as ex:
             log_event(
                 "database_poll_iteration_failed",
@@ -877,8 +915,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
     agy_exe = find_agy_path()
     args = [agy_exe]
     
-    # Use current working directory as default
-    cwd = os.getcwd()
+    cwd = session_store.get_workspace() or os.getcwd()
     args.extend(["--add-dir", cwd])
     
     if conversation_id:
@@ -914,6 +951,7 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
             proc = subprocess.Popen(
                 args,
                 cwd=cwd,
+                env=build_child_environment(),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

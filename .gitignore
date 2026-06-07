@@ -7,7 +7,6 @@ dist/
 *.log.bak
 logs/
 out.txt
-AGENTS.md
 archive/
 
 # Local AI workspace memory and runtime state

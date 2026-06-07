@@ -16,7 +16,8 @@ adapter.
 
 | Component | Responsibility |
 | --- | --- |
-| `bin/*.cmd` wrappers | Present compatibility executable names and provider versions |
+| `bin/<provider>/*.exe` launchers | Present native Windows executable names and forward stdio to Python |
+| `bin/<provider>/*.cmd` wrappers | Provide shell-compatible fallback entry points and version responses |
 | `src/agy_shim/main.py` | ACP framing, dispatch, sessions, subprocesses, and streaming |
 | `agy.exe` | Executes prompts and maintains Antigravity conversations |
 | Conversation SQLite DB | Supplies incremental response records |
@@ -34,10 +35,27 @@ that changes executable resolution. Antigravity authentication and upgrades
 must be managed directly through Antigravity; AGY-Shim upgrades must be managed
 through this repository.
 
+## Native Launcher Boundary
+
+Some Windows host discovery paths request a provider executable directly and
+do not behave like an interactive shell resolving a `.cmd` file through
+`PATHEXT`. Each provider directory therefore includes a small native launcher
+compiled from `scripts/launcher.cs`.
+
+The launcher derives the provider identity from its filename, starts
+`src/agy_shim/main.py`, avoids opening another console window, forwards
+stdin/stdout/stderr as byte streams, and preserves the Python exit code. It
+does not parse ACP, read Antigravity databases, or invoke `agy.exe` directly.
+
+The binaries are build outputs rather than independent source. Rebuild them
+with `scripts/build_launchers.ps1` and verify their version responses before
+release.
+
 ## Request Flow
 
-1. The host starts a provider wrapper from `bin/`.
-2. The wrapper starts `src/agy_shim/main.py` with a provider identity.
+1. The host starts a provider `.exe` launcher or `.cmd` fallback from
+   `bin/<provider>/`.
+2. The launcher or wrapper starts `src/agy_shim/main.py` with a provider identity.
 3. The host sends ACP JSON-RPC requests over standard input.
 4. The shim creates or restores session state.
 5. For a prompt, the shim starts `agy.exe` for the active workspace.

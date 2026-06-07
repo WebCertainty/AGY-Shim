@@ -7,7 +7,11 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
 
-from agy_shim.main import escape_plain_text_backslashes, get_stable_raw_text
+from agy_shim.main import (
+    compute_safe_stream_delta,
+    escape_plain_text_backslashes,
+    get_stable_raw_text,
+)
 
 class TestEscapeBackslashes(unittest.TestCase):
     def test_basic_path_escaping(self):
@@ -95,6 +99,44 @@ class TestEscapeBackslashes(unittest.TestCase):
         self.assertEqual(get_stable_raw_text("code~"), ("code", "~"))
         self.assertEqual(get_stable_raw_text("code~~"), ("code", "~~"))
         self.assertEqual(get_stable_raw_text("code~~~"), ("code~~~", ""))
+
+    def test_restart_waits_for_the_original_prefix_to_return(self):
+        sent = (
+            "I will list the contents of the Reporting Platform subfolder "
+            "in the Clairvoy"
+        )
+        restarted = "I will view the contents of archive/decisions.md"
+
+        delta, next_sent = compute_safe_stream_delta(sent, restarted, is_final=True)
+
+        self.assertIsNone(delta)
+        self.assertEqual(next_sent, sent)
+
+        restored = (
+            sent
+            + "ance project plans. I will view the contents of "
+            + r"D:\CODE-REPO\Tools\AGY-Shim\archive\decisions.md"
+        )
+        delta, next_sent = compute_safe_stream_delta(sent, restored, is_final=True)
+
+        self.assertEqual(
+            delta,
+            "ance project plans. I will view the contents of "
+            + r"D:\CODE-REPO\Tools\AGY-Shim\archive\decisions.md",
+        )
+        self.assertEqual(next_sent, restored)
+
+    def test_restart_does_not_concatenate_new_tool_narration(self):
+        sent = (
+            "(consolidating reviews, drafting the remediation plan, "
+            "and delegating validation roles"
+        )
+        restarted = "I will update the AGENTS.md file using replace_file_content"
+
+        delta, next_sent = compute_safe_stream_delta(sent, restarted, is_final=True)
+
+        self.assertIsNone(delta)
+        self.assertEqual(next_sent, sent)
 
 if __name__ == "__main__":
     unittest.main()

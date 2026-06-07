@@ -37,10 +37,15 @@ jobs:
           python -m py_compile
           src/agy_shim/main.py
           tests/test_e2e.py
+          tests/test_security.py
           tests/fixtures/mock_agy.py
 
-      - name: Run deterministic ACP end-to-end tests
-        run: python tests/test_e2e.py
+      - name: Run deterministic test suite
+        run: python -m pytest -q
+
+      - name: Rebuild native provider launchers
+        shell: pwsh
+        run: .\scripts\build_launchers.ps1 -OutputRoot "$env:RUNNER_TEMP\agy-shim-launchers\bin" -IncludeRuntime
 
       - name: Verify provider wrappers
         shell: pwsh
@@ -54,8 +59,17 @@ jobs:
           }
 
           foreach ($provider in $expected.Keys) {
-            $actual = (& ".\bin\$provider.cmd" --version).Trim()
-            if ($actual -ne $expected[$provider]) {
-              throw "$provider returned '$actual'; expected '$($expected[$provider])'"
+            $cmdActual = (& ".\bin\$provider\$provider.cmd" --version).Trim()
+            $exeActual = (& "$env:RUNNER_TEMP\agy-shim-launchers\bin\$provider\$provider.exe" --version).Trim()
+            if ($cmdActual -ne $expected[$provider]) {
+              throw "$provider.cmd returned '$cmdActual'; expected '$($expected[$provider])'"
             }
+            if ($exeActual -ne $expected[$provider]) {
+              throw "$provider.exe returned '$exeActual'; expected '$($expected[$provider])'"
+            }
+          }
+
+          $cursorAgent = (& "$env:RUNNER_TEMP\agy-shim-launchers\bin\cursor\cursor-agent.exe" --version).Trim()
+          if ($cursorAgent -ne "1.0.0") {
+            throw "cursor-agent.exe returned '$cursorAgent'; expected '1.0.0'"
           }

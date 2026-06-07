@@ -42,6 +42,7 @@ def run_test_with_framing(use_lsp=False):
     shim_env = os.environ.copy()
     shim_env["AGY_SHIM_LOG_FILE"] = log_path
     shim_env["USERPROFILE"] = profile_dir
+    shim_env["AGY_TEST_PARENT_SECRET"] = "must-not-reach-child"
     shim_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
     proc = subprocess.Popen(
         [sys.executable, SHIM_FILE],
@@ -238,6 +239,13 @@ def run_test_with_framing(use_lsp=False):
         "sessions.json",
     )
     assert os.path.exists(workspace_state), "Workspace URI was not used for session state"
+    invocation_path = os.path.join(profile_dir, "mock_invocation.json")
+    with open(invocation_path, "r", encoding="utf-8") as f:
+        invocation = json.load(f)
+    assert os.path.normcase(invocation["cwd"]) == os.path.normcase(workspace_dir)
+    add_dir_index = invocation["args"].index("--add-dir")
+    assert os.path.normcase(invocation["args"][add_dir_index + 1]) == os.path.normcase(workspace_dir)
+    assert invocation["secret_inherited"] is False
     runtime_dir.cleanup()
     log("Privacy-safe logging test passed.")
         

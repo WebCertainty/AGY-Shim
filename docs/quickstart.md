@@ -2,6 +2,10 @@
 
 This quickstart shows the minimum steps to run AGY-Shim in safe-mode (default) and to opt-in for permission-bypass.
 
+Graphify is not required for either mode. It is an optional developer tool
+with a separate installation workflow documented in
+[graphify.md](graphify.md).
+
 ## Safe-mode (recommended for evaluation)
 
 Safe-mode prevents any prompt execution that would bypass interactive permissions checks. By default, AGY-Shim rejects session/prompt calls unless explicitly enabled.

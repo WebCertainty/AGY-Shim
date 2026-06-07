@@ -23,6 +23,11 @@ These tests validate the bridge behavior expected by Clairvoyance; they are
 not a general ACP conformance suite. Compatibility with another ACP host must
 be recorded separately against that host and version.
 
+Graphify is not required by the automated suite or the live bridge. Optional
+Graphify-assisted agent testing requires a separate user-level installation;
+see [graphify.md](graphify.md). A missing Graphify installation is recorded as
+not applicable, not as an AGY-Shim test failure.
+
 ## Continuous Integration
 
 The GitHub Actions workflow at
@@ -186,4 +191,3 @@ No other ACP host is covered by this evidence record.
 [TEST-RUNNER] ALL TESTS COMPLETED SUCCESSFULLY!
 ==================================================
 ```
-
