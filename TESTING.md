@@ -39,10 +39,10 @@ model quota. The suite injects `tests/fixtures/mock_agy.cmd`.
 Check each wrapper:
 
 ```powershell
+.\bin\gemini\gemini.cmd --version
 .\bin\copilot\copilot.cmd --version
 .\bin\claude\claude.cmd --version
 .\bin\codex\codex.cmd --version
-.\bin\gemini\gemini.cmd --version
 .\bin\cursor\cursor.cmd --version
 .\bin\cursor\cursor-agent.cmd --version
 ```
@@ -54,7 +54,7 @@ temporary directory to verify provenance without overwriting the checkout:
 $launcherOutput = Join-Path $env:TEMP "agy-shim-launchers"
 Remove-Item $launcherOutput -Recurse -Force -ErrorAction SilentlyContinue
 .\scripts\build_launchers.ps1 -OutputRoot "$launcherOutput\bin" -IncludeRuntime
-& "$launcherOutput\bin\copilot\copilot.exe" --version
+& "$launcherOutput\bin\gemini\gemini.exe" --version
 ```
 
 Pass: the rebuilt executable returns the expected provider version and
@@ -64,10 +64,10 @@ Expected output:
 
 | Wrapper | Version |
 | --- | --- |
+| Gemini | `0.45.1` |
 | Copilot | `1.0.59` |
 | Claude | `2.1.165` |
 | Codex | `0.137.0` |
-| Gemini | `0.45.1` |
 | Cursor | `1.0.0` |
 | Cursor Agent | `1.0.0` |
 

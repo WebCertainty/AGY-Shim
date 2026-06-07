@@ -2,7 +2,7 @@
 
 AGY-Shim is an experimental Windows bridge that lets an ACP host, currently
 tested with Stardock Clairvoyance, run Antigravity (`agy.exe`) through a
-provider-compatible command such as `copilot`.
+provider-compatible command such as `gemini`.
 
 > [!WARNING]
 > Prompt execution requires Antigravity's
@@ -36,7 +36,7 @@ Keep the cloned directory in a permanent location. The provider launchers run
 the Python source directly from this checkout; AGY-Shim does not need to be
 installed as a Python package for normal use.
 
-### 2. Configure the Copilot wrapper
+### 2. Configure the Gemini wrapper
 
 The interactive installer is recommended because it explains the security
 opt-in before making changes:
@@ -49,7 +49,7 @@ Choose:
 
 1. `Install`
 2. `User` scope for a desktop-launched host such as Clairvoyance
-3. `copilot`
+3. `gemini`
 4. Accept the permission-bypass warning only if the test environment is
    appropriate
 
@@ -61,13 +61,13 @@ Restart the ACP host after a User-scope installation, then run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Verify
-.\bin\copilot\copilot.cmd --version
+.\bin\gemini\gemini.cmd --version
 ```
 
-Expected Copilot compatibility version: `1.0.59`.
+Expected Gemini compatibility version: `0.45.1`.
 
 Do not use the host application's Sign In, Auth, Update, Reinstall, or Install
-controls for the displayed Copilot identity. Authenticate Antigravity
+controls for the displayed Gemini identity. Authenticate Antigravity
 separately using its supported process.
 
 ### 4. Test
@@ -98,7 +98,7 @@ Restart PowerShell and the ACP host afterward.
 From the repository root, give a trusted coding agent this prompt:
 
 ```text
-Install and validate AGY-Shim for the Copilot wrapper.
+Install and validate AGY-Shim for the Gemini wrapper.
 
 1. Confirm this is Windows, Python is 3.10 or later, and Antigravity's agy.exe
    exists and is already authenticated.
@@ -106,9 +106,9 @@ Install and validate AGY-Shim for the Copilot wrapper.
    wait for my explicit approval before changing PATH or environment variables.
 3. After approval, run:
    powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
-   Select Install, User scope, and copilot.
+   Select Install, User scope, and gemini.
 4. Run the installer again with -Action Verify.
-5. Run .\bin\copilot\copilot.cmd --version and report the result.
+5. Run .\bin\gemini\gemini.cmd --version and report the result.
 6. For optional developer tests, install the test extra with
    python -m pip install -e ".[test]" and run
    python -m pytest -q.
@@ -184,7 +184,7 @@ An explicit Antigravity path can be supplied:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 `
-  -Action Install -Scope User -Provider copilot `
+  -Action Install -Scope User -Provider gemini `
   -AgyPath "C:\Path\To\agy.exe"
 ```
 
@@ -193,7 +193,7 @@ acceptance of the permission-bypass risk:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 `
-  -Action Install -Scope User -Provider copilot -Bypass
+  -Action Install -Scope User -Provider gemini -Bypass
 ```
 
 Use this only in controlled automation. The interactive installer is the
@@ -205,7 +205,7 @@ recommended user path.
 | --- | --- |
 | `Safe-mode active` | Run the installer and explicitly accept the bypass warning |
 | `agy.exe` not found | Install/authenticate Antigravity or pass `-AgyPath` |
-| Wrong CLI launches | Run `where.exe copilot`; the AGY-Shim path must be first |
+| Wrong CLI launches | Run `where.exe gemini`; the AGY-Shim path must be first |
 | Host still sees old PATH | Restart the host after User-scope changes |
 | Authentication prompt | Authenticate `agy.exe` separately; do not authenticate the wrapper identity |
 | `Agent is busy` | Wait for or cancel the active prompt before starting another |

@@ -15,9 +15,9 @@ ACP hosts remains a design goal rather than a verified capability.
 
 Clairvoyance auto-detects installed AI agents by checking for specific executable names in the system `PATH`. The shim provides wrappers for all five main providers to allow swapping them out dynamically:
 
-1. **`cursor.cmd`** (Masquerading as Cursor CLI)
-2. **`copilot.cmd`** (Masquerading as Copilot CLI)
-3. **`gemini.cmd`** (Masquerading as Gemini CLI)
+1. **`gemini.cmd`** (Masquerading as Gemini CLI)
+2. **`cursor.cmd`** (Masquerading as Cursor CLI)
+3. **`copilot.cmd`** (Masquerading as Copilot CLI)
 4. **`claude.cmd`** (Masquerading as Claude Code CLI)
 5. **`codex.cmd`** (Masquerading as Codex CLI)
 
@@ -86,7 +86,7 @@ To prevent E2E tests from failing due to external network issues, OAuth credenti
 * Run [test_e2e.py](../tests/test_e2e.py). The suite automatically injects the mock testing path, validating both raw JSON lines and LSP Content-Length framing.
 
 ### Manual Verification
-1. Run `.\bin\copilot\copilot.cmd --version` and
-   `.\bin\copilot\copilot.exe --version` to verify version outputs.
+1. Run `.\bin\gemini\gemini.cmd --version` and
+   `.\bin\gemini\gemini.exe --version` to verify version outputs.
 2. Verify Clairvoyance's "Cloud AI" settings tab to check that providers are successfully detected as installed.
 3. Open a workspace inside Clairvoyance, select the masqueraded agent, and verify multi-turn streaming responses with the real `agy.exe` binary.
