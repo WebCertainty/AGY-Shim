@@ -14,7 +14,15 @@ use [README.md](../README.md).
 - Antigravity CLI installed and authenticated
 - The AGY-Shim repository checked out locally
 
-Graphify is optional and is not required for this workflow.
+[Graphify](https://github.com/safishamsi/graphify) is optional and is not
+required for this workflow. To install the version validated by this project:
+
+```bat
+winget install --id astral-sh.uv --exact
+uv tool install "graphifyy==0.8.34"
+```
+
+See [graphify.md](graphify.md) for the optional indexing workflow.
 
 ## Install
 

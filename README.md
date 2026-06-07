@@ -18,8 +18,21 @@ provider-compatible command such as `gemini`.
 - Antigravity CLI installed and authenticated
 - An ACP host; current live evidence is for Stardock Clairvoyance
 
-Graphify is optional. It is not installed with AGY-Shim and is not required
-to install, run, package, or test the shim.
+[Graphify](https://github.com/safishamsi/graphify) is optional. It is not
+installed with AGY-Shim and is not required to install, run, package, or test
+the shim.
+
+To use the optional Graphify-assisted repository navigation validated by this
+project:
+
+```bat
+winget install --id astral-sh.uv --exact
+uv tool install "graphifyy==0.8.34"
+```
+
+Restart the terminal if `graphify` is not immediately available, then run
+`graphify --version`. See [docs/graphify.md](docs/graphify.md) for indexing and
+agent usage.
 
 ### 1. Choose an installation folder and clone
 
