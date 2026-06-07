@@ -18,8 +18,8 @@
 .PARAMETER Help
     Show detailed usage instructions.
 .EXAMPLE
-    .\scripts\setup_agy_shim.ps1 -Action Install -Scope User -Provider copilot -Bypass
-    Installs the shim permanently for Copilot with permission bypass enabled.
+    .\scripts\setup_agy_shim.ps1 -Action Install -Scope User -Provider gemini -Bypass
+    Installs the shim permanently for Gemini with permission bypass enabled.
 .EXAMPLE
     .\scripts\setup_agy_shim.ps1 -Action Verify
     Verifies the current shim configuration and wrapper precedence.
@@ -82,8 +82,8 @@ Parameters:
   -Help         Show this help information.
 
 Examples:
-  1. Permanent install for Copilot (Bypassing permissions):
-     .\scripts\setup_agy_shim.ps1 -Action Install -Scope User -Provider copilot -Bypass
+  1. Permanent install for Gemini (Bypassing permissions):
+     .\scripts\setup_agy_shim.ps1 -Action Install -Scope User -Provider gemini -Bypass
 
   2. Temporary session-only install for Gemini:
      .\scripts\setup_agy_shim.ps1 -Action Install -Scope Session -Provider gemini

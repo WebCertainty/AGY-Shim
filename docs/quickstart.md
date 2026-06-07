@@ -1,7 +1,7 @@
 # Quickstart and Safe Mode
 
 > **TL;DR:** From the repository root, run the setup wizard, choose the
-> Copilot wrapper, explicitly accept the bypass risk, restart the ACP host,
+> Gemini wrapper, explicitly accept the bypass risk, restart the ACP host,
 > then run `-Action Verify`.
 
 This page is the short operational reference. For the full onboarding path,
@@ -14,16 +14,33 @@ use [README.md](../README.md).
 - Antigravity CLI installed and authenticated
 - The AGY-Shim repository checked out locally
 
-Graphify is optional and is not required for this workflow.
+[Graphify](https://github.com/safishamsi/graphify) is optional and is not
+required for this workflow. To install the version validated by this project:
+
+```bat
+winget install --id astral-sh.uv --exact
+uv tool install "graphifyy==0.8.34"
+```
+
+See [graphify.md](graphify.md) for the optional indexing workflow.
 
 ## Install
 
-```powershell
-python -m pip install .
+Open Command Prompt and replace `YOUR-INSTALL-FOLDER` with an existing
+permanent folder, for example `D:\Tools`:
+
+```bat
+cd /d "YOUR-INSTALL-FOLDER"
+git clone https://github.com/WebCertainty/AGY-Shim.git
+cd AGY-Shim
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
 ```
 
-For Clairvoyance, choose `User` scope and the `copilot` provider. The wizard
+Keep the cloned repository in place. The launchers execute
+`src\agy_shim\main.py` from this checkout, so no Python package installation is
+required for normal use.
+
+For Clairvoyance, choose `User` scope and the `gemini` provider. The wizard
 will explain the permission-bypass risk and make no environment changes unless
 you explicitly type `Y`.
 
@@ -33,10 +50,10 @@ Restart Clairvoyance after a User-scope installation.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Verify
-.\bin\copilot\copilot.cmd --version
+.\bin\gemini\gemini.cmd --version
 ```
 
-Expected version: `1.0.59`.
+Expected version: `0.45.1`.
 
 ## Safe mode
 
@@ -50,7 +67,7 @@ without enabling prompts, start the module directly from the repository root:
 ```powershell
 $env:AGY_PATH = "$env:LOCALAPPDATA\agy\bin\agy.exe"
 Remove-Item env:AGY_SHIM_ALLOW_BYPASS -ErrorAction SilentlyContinue
-python -m agy_shim.main
+python .\src\agy_shim\main.py
 ```
 
 ## Uninstall
@@ -67,7 +84,7 @@ Restart PowerShell and the ACP host afterward.
 | --- | --- |
 | `Safe-mode active` | Run the setup wizard and explicitly accept the warning |
 | `agy.exe` not found | Install Antigravity or pass `-AgyPath` to the installer |
-| Wrong provider CLI starts | Run `where.exe copilot` and check PATH precedence |
+| Wrong provider CLI starts | Run `where.exe gemini` and check PATH precedence |
 | Host does not see changes | Restart it after User-scope installation |
 | Login prompt or auth error | Authenticate Antigravity itself, not the wrapper |
 
