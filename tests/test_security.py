@@ -6,7 +6,11 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
 
-from agy_shim.main import build_child_environment, read_response_from_db
+from agy_shim.main import (
+    build_child_environment,
+    check_agy_logs_for_error,
+    read_response_from_db,
+)
 
 
 def test_child_environment_excludes_parent_secrets(monkeypatch):
@@ -31,3 +35,33 @@ def test_conversation_id_cannot_escape_conversations_directory(tmp_path):
     conn.close()
 
     assert read_response_from_db(str(conversations), "../outside", -1) is None
+
+
+def test_transient_auth_error_is_cleared_by_silent_auth_success(tmp_path):
+    conversations = tmp_path / "antigravity-cli" / "conversations"
+    log_dir = conversations.parent / "log"
+    conversations.mkdir(parents=True)
+    log_dir.mkdir()
+    (log_dir / "cli-test.log").write_text(
+        "E0608 02:21:07 server.go] You are not logged into Antigravity.\n"
+        "I0608 02:21:09 auth.go] ChainedAuth: authenticated via keyring\n"
+        "I0608 02:21:13 printmode.go] Print mode: silent auth succeeded\n",
+        encoding="utf-8",
+    )
+
+    assert check_agy_logs_for_error(str(conversations)) is None
+
+
+def test_unrecovered_auth_error_is_reported(tmp_path):
+    conversations = tmp_path / "antigravity-cli" / "conversations"
+    log_dir = conversations.parent / "log"
+    conversations.mkdir(parents=True)
+    log_dir.mkdir()
+    (log_dir / "cli-test.log").write_text(
+        "E0608 02:21:07 server.go] You are not logged into Antigravity.\n",
+        encoding="utf-8",
+    )
+
+    assert "Not logged into Antigravity" in check_agy_logs_for_error(
+        str(conversations)
+    )

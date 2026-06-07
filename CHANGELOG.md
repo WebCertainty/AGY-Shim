@@ -2,6 +2,22 @@
 
 All notable changes to this project are recorded here.
 
+## v0.2.2 - Silent authentication recovery
+
+### Bug Fixes
+
+- Do not terminate Antigravity when its startup log briefly reports that the
+  user is not logged in before Windows keyring authentication succeeds.
+- Treat later `authenticated via keyring`, `authenticated successfully`, or
+  `silent auth succeeded` log entries as recovery from an earlier transient
+  authentication warning.
+- Keep reporting authentication errors when no later success is present.
+
+### Testing
+
+- Added regression coverage for both recovered and unrecovered authentication
+  log sequences observed after restarting Clairvoyance.
+
 ## v0.2.1 - Installation documentation corrections
 
 ### Bug Fixes
