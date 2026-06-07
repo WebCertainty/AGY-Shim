@@ -465,10 +465,44 @@ def get_proto_field(blob, target_field):
             return None
     return None
 
+def has_proto_field(blob, target_field):
+    if not blob:
+        return False
+    pos = 0
+    while pos < len(blob):
+        try:
+            tag, pos = read_varint(blob, pos)
+        except:
+            break
+        field_number = tag >> 3
+        wire_type = tag & 0x07
+        if field_number == target_field:
+            return True
+        if wire_type == 0:
+            try:
+                _, pos = read_varint(blob, pos)
+            except:
+                break
+        elif wire_type == 2:
+            try:
+                length, pos = read_varint(blob, pos)
+                pos += length
+            except:
+                break
+        elif wire_type == 1:
+            pos += 8
+        elif wire_type == 5:
+            pos += 4
+        else:
+            break
+    return False
+
 def extract_text_from_step_payload(blob):
     try:
         field_20 = get_proto_field(blob, 20)
         if field_20 is None:
+            return None
+        if has_proto_field(field_20, 7):
             return None
         field_1 = get_proto_field(field_20, 1)
         if field_1 is None:
@@ -814,6 +848,16 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
     prompt_text = "\n".join([p.get("text", "") for p in prompt_list if p.get("type") == "text"])
     prompt_text = prompt_text.strip()
     
+    if prompt_text.startswith("/model"):
+        log_event("model_command_intercepted", prompt=prompt_text)
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "stopReason": "end_turn"
+            }
+        }
+        
     before_snapshot = get_conversation_snapshot(conversations_dir)
     
     agy_exe = find_agy_path()
