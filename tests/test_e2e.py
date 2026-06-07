@@ -44,6 +44,10 @@ def run_test_with_framing(use_lsp=False):
     shim_env["USERPROFILE"] = profile_dir
     shim_env["AGY_TEST_PARENT_SECRET"] = "must-not-reach-child"
     shim_env["AGY_SHIM_ALLOW_BYPASS"] = "1"
+    # Real Antigravity responses are read from its conversation database, not
+    # stdout. Suppressing mock stdout catches false empty-response failures
+    # after a response was already streamed from SQLite.
+    shim_env["AGY_MOCK_SUPPRESS_STDOUT"] = "1"
     proc = subprocess.Popen(
         [sys.executable, SHIM_FILE],
         stdin=subprocess.PIPE,

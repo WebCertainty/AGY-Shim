@@ -763,12 +763,21 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
                 
     try:
         loop_counter = 0
+        poll_started_at = time.monotonic()
         while not stop_event.is_set():
             check_and_send(is_final=False)
             
             loop_counter += 1
             if loop_counter % 10 == 0:
-                err_msg = check_agy_logs_for_error(conversations_dir)
+                # Antigravity commonly logs an authentication error before
+                # silent Windows keyring recovery completes. Give that
+                # recovery a bounded window while still reporting quota
+                # failures immediately.
+                auth_recovery_pending = time.monotonic() - poll_started_at < 10
+                err_msg = check_agy_logs_for_error(
+                    conversations_dir,
+                    ignore_auth_errors=auth_recovery_pending,
+                )
                 if err_msg:
                     log_event("realtime_agy_error_detected", error=err_msg)
                     send_update_notification(session_id, f"\n\n[Shim Warning] {err_msg}\n")
@@ -786,7 +795,7 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
     except Exception as e:
         log_event("database_poll_failed", error=error_category(e))
 
-def check_agy_logs_for_error(conversations_dir):
+def check_agy_logs_for_error(conversations_dir, ignore_auth_errors=False):
     try:
         import re
         cli_dir = os.path.dirname(conversations_dir)
@@ -885,7 +894,7 @@ def check_agy_logs_for_error(conversations_dir):
                     time_info += f"Reset target: {reset_target_str} (in {resets_in}). "
                 
                 return f"Error: Antigravity API Quota Exhausted (429). {time_info}Please check your AI Credit limits or wait for the quota window to reset."
-        if last_auth_error > last_auth_success:
+        if not ignore_auth_errors and last_auth_error > last_auth_success:
             return "Error: Not logged into Antigravity. Please run the login command in the IDE/CLI."
         return None
     except Exception as e:
@@ -1117,37 +1126,8 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                     "message": err_msg
                 }
             }
-            
-            if final_last_step_idx <= last_step_idx:
-                err_msg = check_agy_logs_for_error(conversations_dir)
-                if err_msg:
-                    log_event("agy_error_detected")
-                    send_update_notification(session_id, err_msg)
-                    return {
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "error": {
-                            "code": -32000,
-                            "message": err_msg
-                        }
-                    }
-                else:
-                    stdout_text = "".join(stdout_lines).strip()
-                    if stdout_text:
-                        stdout_text = escape_plain_text_backslashes(stdout_text)
-                        send_update_notification(session_id, stdout_text)
-                    else:
-                        err_msg = "Error: The agent completed the turn but produced no output. Please check the local agy logs."
-                        send_update_notification(session_id, err_msg)
-                        return {
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {
-                                "code": -32000,
-                                "message": err_msg
-                            }
-                        }
-        else:
+
+        if final_last_step_idx <= last_step_idx:
             stdout_text = "".join(stdout_lines).strip()
             if stdout_text:
                 stdout_text = escape_plain_text_backslashes(stdout_text)

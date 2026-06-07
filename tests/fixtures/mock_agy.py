@@ -120,7 +120,8 @@ def main():
     conn.commit()
     
     conn.close()
-    print(response_text)
+    if os.environ.get("AGY_MOCK_SUPPRESS_STDOUT") != "1":
+        print(response_text)
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here.
 
+## v0.2.3 - Authentication startup grace period
+
+### Bug Fixes
+
+- Allow Antigravity up to 10 seconds to complete silent Windows keyring
+  authentication before treating its initial not-logged-in message as fatal.
+- Continue detecting API quota failures immediately during the authentication
+  recovery window.
+- Preserve final authentication failure reporting when silent recovery does
+  not succeed.
+- Do not report a successful database-streamed response as empty merely
+  because Antigravity produced no stdout.
+
+### Testing
+
+- Added regression coverage for deferring a transient real-time
+  authentication error.
+- Run the primary end-to-end flow without mock stdout so it matches
+  Antigravity's database-backed response behavior.
+- Full deterministic suite: 20 tests passed.
+
 ## v0.2.2 - Silent authentication recovery
 
 ### Bug Fixes

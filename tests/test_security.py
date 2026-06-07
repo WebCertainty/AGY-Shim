@@ -65,3 +65,22 @@ def test_unrecovered_auth_error_is_reported(tmp_path):
     assert "Not logged into Antigravity" in check_agy_logs_for_error(
         str(conversations)
     )
+
+
+def test_realtime_check_can_defer_unrecovered_auth_error(tmp_path):
+    conversations = tmp_path / "antigravity-cli" / "conversations"
+    log_dir = conversations.parent / "log"
+    conversations.mkdir(parents=True)
+    log_dir.mkdir()
+    (log_dir / "cli-test.log").write_text(
+        "E0608 02:21:07 server.go] You are not logged into Antigravity.\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        check_agy_logs_for_error(
+            str(conversations),
+            ignore_auth_errors=True,
+        )
+        is None
+    )
