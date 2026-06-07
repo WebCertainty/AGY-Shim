@@ -21,13 +21,16 @@ provider-compatible command such as `copilot`.
 Graphify is optional. It is not installed with AGY-Shim and is not required
 to install, run, package, or test the shim.
 
-### 1. Clone and install
+### 1. Clone
 
 ```powershell
 git clone https://github.com/WebCertainty/AGY-Shim.git
 cd AGY-Shim
-python -m pip install .
 ```
+
+Keep the cloned directory in a permanent location. The provider launchers run
+the Python source directly from this checkout; AGY-Shim does not need to be
+installed as a Python package for normal use.
 
 ### 2. Configure the Copilot wrapper
 
@@ -102,7 +105,8 @@ Install and validate AGY-Shim for the Copilot wrapper.
    Select Install, User scope, and copilot.
 4. Run the installer again with -Action Verify.
 5. Run .\bin\copilot\copilot.cmd --version and report the result.
-6. Install the test extra with python -m pip install -e ".[test]" and run
+6. For optional developer tests, install the test extra with
+   python -m pip install -e ".[test]" and run
    python -m pytest -q.
 7. Do not use provider Sign In, Auth, Update, Reinstall, or Install controls.
 8. Do not modify source files, commit, or push. Report every command and result.

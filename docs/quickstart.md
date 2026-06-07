@@ -19,9 +19,12 @@ Graphify is optional and is not required for this workflow.
 ## Install
 
 ```powershell
-python -m pip install .
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
 ```
+
+Keep the cloned repository in place. The launchers execute
+`src\agy_shim\main.py` from this checkout, so no Python package installation is
+required for normal use.
 
 For Clairvoyance, choose `User` scope and the `copilot` provider. The wizard
 will explain the permission-bypass risk and make no environment changes unless
@@ -50,7 +53,7 @@ without enabling prompts, start the module directly from the repository root:
 ```powershell
 $env:AGY_PATH = "$env:LOCALAPPDATA\agy\bin\agy.exe"
 Remove-Item env:AGY_SHIM_ALLOW_BYPASS -ErrorAction SilentlyContinue
-python -m agy_shim.main
+python .\src\agy_shim\main.py
 ```
 
 ## Uninstall
