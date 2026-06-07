@@ -21,9 +21,13 @@ provider-compatible command such as `copilot`.
 Graphify is optional. It is not installed with AGY-Shim and is not required
 to install, run, package, or test the shim.
 
-### 1. Clone
+### 1. Choose an installation folder and clone
 
-```powershell
+Open Command Prompt. Replace `YOUR-INSTALL-FOLDER` with an existing permanent
+folder, for example `D:\Tools`.
+
+```bat
+cd /d "YOUR-INSTALL-FOLDER"
 git clone https://github.com/WebCertainty/AGY-Shim.git
 cd AGY-Shim
 ```

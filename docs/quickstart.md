@@ -18,7 +18,13 @@ Graphify is optional and is not required for this workflow.
 
 ## Install
 
-```powershell
+Open Command Prompt and replace `YOUR-INSTALL-FOLDER` with an existing
+permanent folder, for example `D:\Tools`:
+
+```bat
+cd /d "YOUR-INSTALL-FOLDER"
+git clone https://github.com/WebCertainty/AGY-Shim.git
+cd AGY-Shim
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
 ```
 
