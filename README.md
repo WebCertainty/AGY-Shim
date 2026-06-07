@@ -34,7 +34,47 @@ Restart the terminal if `graphify` is not immediately available, then run
 `graphify --version`. See [docs/graphify.md](docs/graphify.md) for indexing and
 agent usage.
 
-### 1. Choose an installation folder and clone
+## Choose one installation method
+
+Use either the Clairvoyance-assisted method or the manual CMD method. Do not
+run both.
+
+### Option A: Ask Clairvoyance to install it
+
+Use this option if you already have a trusted Clairvoyance coding agent that
+can run commands on your Windows machine:
+
+```text
+Install and validate AGY-Shim for the Gemini wrapper.
+
+1. First check whether AGY-Shim is already installed and correctly configured.
+   If verification passes, do not reinstall or change PATH or environment
+   variables; report the existing installation instead.
+2. Confirm this is Windows, Python is 3.10 or later, Git is available, and
+   Antigravity's agy.exe exists and is already authenticated.
+3. If AGY-Shim is not already installed, ask me to choose an existing permanent
+   parent folder for the checkout. Clone
+   https://github.com/WebCertainty/AGY-Shim.git into that folder and keep the
+   checkout there permanently.
+4. Explain that prompt execution requires --dangerously-skip-permissions and
+   wait for my explicit approval before changing PATH or environment variables.
+5. After approval, run:
+   powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
+   Select Install, User scope, and gemini.
+6. Run the installer again with -Action Verify.
+7. Run .\bin\gemini\gemini.cmd --version and report the result.
+8. For optional developer tests, install the test extra with
+   python -m pip install -e ".[test]" and run python -m pytest -q.
+9. Do not use provider Sign In, Auth, Update, Reinstall, or Install controls.
+10. Do not modify source files, commit, or push. Report every command and result.
+```
+
+The agent must still ask you to accept the permission-bypass risk. A prompt is
+not consent.
+
+### Option B: Install manually from Command Prompt
+
+#### 1. Choose an installation folder and clone
 
 Open Command Prompt. Replace `YOUR-INSTALL-FOLDER` with an existing permanent
 folder, for example `D:\Tools`.
@@ -49,7 +89,7 @@ Keep the cloned directory in a permanent location. The provider launchers run
 the Python source directly from this checkout; AGY-Shim does not need to be
 installed as a Python package for normal use.
 
-### 2. Configure the Gemini wrapper
+#### 2. Configure the Gemini wrapper
 
 The interactive installer is recommended because it explains the security
 opt-in before making changes:
@@ -68,7 +108,7 @@ Choose:
 
 For a temporary terminal-only test, choose `Session` scope instead.
 
-### 3. Verify
+## Verify
 
 Restart the ACP host after a User-scope installation, then run:
 
@@ -83,7 +123,7 @@ Do not use the host application's Sign In, Auth, Update, Reinstall, or Install
 controls for the displayed Gemini identity. Authenticate Antigravity
 separately using its supported process.
 
-### 4. Test
+## Test
 
 Install the test extra and run the deterministic offline suite:
 
@@ -98,39 +138,13 @@ Antigravity service or consume API quota.
 For live host, authentication, workspace, streaming, cancellation, Staff, and
 nested-recruitment checks, follow [TESTING.md](TESTING.md).
 
-### 5. Uninstall
+## Uninstall
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1 -Action Uninstall -Scope User
 ```
 
 Restart PowerShell and the ACP host afterward.
-
-## Ask Clairvoyance to set it up
-
-From the repository root, give a trusted coding agent this prompt:
-
-```text
-Install and validate AGY-Shim for the Gemini wrapper.
-
-1. Confirm this is Windows, Python is 3.10 or later, and Antigravity's agy.exe
-   exists and is already authenticated.
-2. Explain that prompt execution requires --dangerously-skip-permissions and
-   wait for my explicit approval before changing PATH or environment variables.
-3. After approval, run:
-   powershell -ExecutionPolicy Bypass -File .\scripts\setup_agy_shim.ps1
-   Select Install, User scope, and gemini.
-4. Run the installer again with -Action Verify.
-5. Run .\bin\gemini\gemini.cmd --version and report the result.
-6. For optional developer tests, install the test extra with
-   python -m pip install -e ".[test]" and run
-   python -m pytest -q.
-7. Do not use provider Sign In, Auth, Update, Reinstall, or Install controls.
-8. Do not modify source files, commit, or push. Report every command and result.
-```
-
-The agent must still ask you to accept the permission-bypass risk. A prompt is
-not consent.
 
 ## What the shim does
 
