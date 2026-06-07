@@ -1,7 +1,13 @@
 # Testing AGY-Shim
 
-This guide validates that AGY-Shim is installed, authenticated, operating in
-the correct workspace, and communicating reliably with an ACP host.
+> **TL;DR:** Run `python -m pip install -e ".[test]"` followed by
+> `python -m pytest -q` for the offline automated suite. Restart the ACP host
+> and continue from section 2 only when you want to perform live Antigravity
+> tests that consume quota.
+
+This is the operator checklist for validating installation, authentication,
+workspace selection, streaming, cancellation, and Clairvoyance Staff behavior.
+For test design and evidence, see [docs/testing.md](docs/testing.md).
 
 The automated suite is host-independent. The live Staff and recruitment tests
 are Clairvoyance-specific and optional for users of other ACP hosts.
@@ -12,7 +18,7 @@ are Clairvoyance-specific and optional for users of other ACP hosts.
 - An authenticated Antigravity CLI (`agy.exe`).
 - AGY-Shim installed for the provider identity being tested.
 - `AGY_SHIM_ALLOW_BYPASS=1` set through the approved installation flow.
-- Sufficient Antigravity API quota for the complete live test.
+- Sufficient Antigravity API quota for sections 2 through 6 only.
 
 Run live tests with a newly created agent after restarting the ACP host. An
 agent started before a shim update does not validate the updated process.
@@ -22,12 +28,13 @@ agent started before a shim update does not validate the updated process.
 From the repository root:
 
 ```powershell
-python -m pip install --no-deps .
+python -m pip install -e ".[test]"
 python -m py_compile src\agy_shim\main.py tests\test_e2e.py tests\test_security.py tests\fixtures\mock_agy.py
 python -m pytest -q
 ```
 
-Expected result: all tests pass.
+Expected result: all tests pass without contacting Antigravity or consuming
+model quota. The suite injects `tests/fixtures/mock_agy.cmd`.
 
 Check each wrapper:
 

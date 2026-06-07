@@ -1,5 +1,9 @@
 # Security Policy
 
+> **TL;DR:** AGY-Shim is experimental and not approved for production or
+> sensitive workloads. Prompt execution starts `agy.exe` with
+> `--dangerously-skip-permissions` and therefore requires explicit opt-in.
+
 ## Project Status
 
 AGY-Shim is experimental software under active security review. No release is
@@ -60,5 +64,4 @@ Please allow reasonable time for maintainers to investigate and coordinate fixes
 - CI asserts that AGY_SHIM_ALLOW_BYPASS is not set in CI or PR environments.
 - Prefer isolated test environments when enabling AGY_SHIM_ALLOW_BYPASS; never enable in production systems.
 - Keep logs and conversation artifacts out of public releases; sanitize or redact before publishing.
-
 

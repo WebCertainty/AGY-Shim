@@ -1,5 +1,9 @@
 # Architecture
 
+> **TL;DR:** Provider wrappers forward ACP JSON-RPC over standard streams to a
+> Python bridge, which starts `agy.exe` in the initialized workspace and reads
+> responses from Antigravity's conversation database.
+
 ## Purpose
 
 AGY-Shim translates ACP JSON-RPC messages received over standard input into

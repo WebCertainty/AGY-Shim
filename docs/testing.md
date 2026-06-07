@@ -1,8 +1,11 @@
 # End-to-End Testing Methodology & Evidence
 
-This document outlines the testing strategy, design of the mock execution
-environment, and the test evidence for AGY-Shim. Repository paths are relative
-to the checkout root unless stated otherwise.
+> **TL;DR:** This is the developer evidence and methodology document. The
+> automated suite is deterministic, offline, and mock-based. Users looking for
+> commands and live validation prompts should start with
+> [TESTING.md](../TESTING.md).
+
+Repository paths are relative to the checkout root unless stated otherwise.
 
 ---
 

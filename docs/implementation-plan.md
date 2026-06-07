@@ -1,5 +1,8 @@
 # Implementation Plan: Gemini CLI to Antigravity CLI Shim (with Masquerading)
 
+> **TL;DR:** This is historical design context, not the installation guide.
+> Start with [README.md](../README.md) to use the current implementation.
+
 This plan outlines the design and implementation of a lightweight shim for the Agent Client Protocol (ACP) that bridges to the Antigravity CLI (`agy.exe`). To support Stardock Clairvoyance's auto-detection and avoid conflicts with existing CLI installations, the shim masquerades as multiple AI coding providers.
 
 The JSON-RPC/ACP bridge is intended to remain usable independently of

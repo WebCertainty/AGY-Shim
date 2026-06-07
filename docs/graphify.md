@@ -1,8 +1,11 @@
 # Optional Graphify Integration
 
-Graphify is an optional developer tool used to reduce broad repository
-searches and large file reads by coding agents. It is not required to install,
-run, package, or test AGY-Shim.
+> **TL;DR:** Graphify is optional developer tooling for AI agents working on
+> this repository. End users do not need it. It has no effect on AGY-Shim at
+> runtime.
+
+Graphify reduces broad repository searches and large file reads by coding
+agents. It is not required to install, run, package, or test AGY-Shim.
 
 AGY-Shim does not declare Graphify as a Python package dependency. Installing
 AGY-Shim does not install Graphify, and AGY-Shim does not invoke Graphify at

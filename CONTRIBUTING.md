@@ -1,5 +1,9 @@
 # Contributing
 
+> **TL;DR:** Use Windows and Python 3.10+, install `.[test]`, keep changes
+> focused, run `python -m pytest -q`, and rebuild launchers when
+> `scripts/launcher.cs` changes. Graphify is optional.
+
 AGY-Shim is an experimental, limited-maintenance project. Small, focused
 changes with clear evidence are preferred over broad refactors.
 
@@ -29,9 +33,9 @@ Suggested prefixes include `fix/`, `feature/`, `docs/`, `test/`, and
 Before submitting:
 
 ```powershell
+python -m pip install -e ".[test]"
 python -m py_compile src\agy_shim\main.py tests\test_e2e.py tests\fixtures\mock_agy.py
-python tests\test_e2e.py
-python -m pip install --no-deps .
+python -m pytest -q
 ```
 
 When `scripts/launcher.cs` changes, rebuild the provider executables with

@@ -20,22 +20,26 @@ Rules:
 
 ## Current Status
 
-- `main` is three commits ahead of `origin/main`.
+- `main` is six commits ahead of `origin/main`.
 - v0.1 is only confidently validated with the Copilot shim.
-- v0.2 work is paused pending implementation and validation of the prioritized remediation plan.
-- The shadow PM status report and prioritized remediation plan has been established at [sam-status.md](file:///D:/CODE-REPO/Tools/AGY-Shim/scratch/project-management/sam-status.md).
+- v0.2 security, workspace, streaming, installer, launcher, test, and
+  documentation remediation is implemented locally and awaiting final review.
 - A project-scoped Graphify pilot is installed for Codex and Antigravity. Its generated index is local and ignored by Git.
 
 ## Open Issues
 
-- Execute Phase 1 High-Severity fixes (H1-H4) to resolve workspace boundary leaks, path traversal vulnerability, subprocess credential inheritance, and streaming delta mismatch.
-- Execute Phase 2 Medium-Severity hardening and Phase 3 polish items.
-- Perform independent post-remediation validations via Reese, Maxyi, and Max, and write findings to separate files under `scratch/reviews/`.
-- Confirm that Codex and Antigravity actually use Graphify before broad search and file reads.
-- Benchmark representative tasks before making Graphify part of the committed project workflow.
+- Complete final post-remediation review of the simplified documentation and
+  updated installer.
+- Repeat live Clairvoyance authentication, workspace, streaming,
+  cancellation, Staff, and nested-recruitment checks from `TESTING.md`.
+- Decide whether to tag v0.2.0 after reviewing the final diff and test evidence.
+- Push only after explicit user approval.
 
 ## Where We Left Off
 
-- Consolidated all 17 findings from code review, security audit, and documentation review.
-- Documented a master remediation plan with owners, dependencies, and acceptance criteria in [sam-status.md](file:///D:/CODE-REPO/Tools/AGY-Shim/scratch/project-management/sam-status.md).
-- Ready to assign implementation tickets for Phase 1 High-Severity fixes (H1-H4) once developer resources are assigned.
+- Committed the initial v0.2 remediation as `96492a1`.
+- Updated `setup_agy_shim.ps1` to validate prerequisites, require explicit
+  pre-mutation consent, support `-AgyPath`, and roll back failed changes.
+- Simplified onboarding documentation, separated offline automated tests from
+  live tests, declared the pytest extra, and categorized the changelog.
+- Full deterministic suite last passed with 17 tests.

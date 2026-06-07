@@ -11,6 +11,8 @@
     The scope of environment variables and PATH modification. Options: User (permanent), Session (temporary). Default is User.
 .PARAMETER Provider
     The provider to masquerade (e.g., gemini, copilot, claude, codex, cursor). If not specified on Install, the script prompts the user.
+.PARAMETER AgyPath
+    Explicit path to agy.exe. Defaults to an existing AGY_PATH value, then %LOCALAPPDATA%\agy\bin\agy.exe.
 .PARAMETER Bypass
     Set this switch to permanently or temporarily enable the permission bypass flag (AGY_SHIM_ALLOW_BYPASS=1).
 .PARAMETER Help
@@ -39,6 +41,9 @@ Param(
     [string]$Provider,
 
     [Parameter(Mandatory=$false)]
+    [string]$AgyPath,
+
+    [Parameter(Mandatory=$false)]
     [switch]$Bypass,
 
     [Parameter(Mandatory=$false)]
@@ -53,7 +58,7 @@ AGY-Shim Setup & Maintenance Utility
 ====================================
 
 Usage:
-  .\scripts\setup_agy_shim.ps1 [-Action <Install|Uninstall|Verify>] [-Scope <User|Session>] [-Provider <name>] [-Bypass] [-Help]
+  .\scripts\setup_agy_shim.ps1 [-Action <Install|Uninstall|Verify>] [-Scope <User|Session>] [-Provider <name>] [-AgyPath <path>] [-Bypass] [-Help]
 
 Parameters:
   -Action       Action to perform:
@@ -68,6 +73,9 @@ Parameters:
   -Provider     Directly specify the provider wrapper to configure:
                   gemini, copilot, claude, codex, cursor
                   (If omitted during Install, you will be prompted to select one).
+
+  -AgyPath      Explicit path to agy.exe. If omitted, the script preserves an
+                existing AGY_PATH value or uses %LOCALAPPDATA%\agy\bin\agy.exe.
 
   -Bypass       Flag/Switch to enable AGY_SHIM_ALLOW_BYPASS=1 (permits executing prompts without checks).
 
@@ -125,6 +133,26 @@ function Remove-EnvVar([string]$name, [string]$scope) {
     }
 }
 
+function Test-IsShimCommand([string]$candidate, [string]$providerBin) {
+    if (-not $candidate) {
+        return $false
+    }
+
+    try {
+        $candidatePath = [IO.Path]::GetFullPath($candidate)
+        $providerPath = [IO.Path]::GetFullPath($providerBin).TrimEnd(
+            [IO.Path]::DirectorySeparatorChar,
+            [IO.Path]::AltDirectorySeparatorChar
+        ) + [IO.Path]::DirectorySeparatorChar
+        return $candidatePath.StartsWith(
+            $providerPath,
+            [StringComparison]::OrdinalIgnoreCase
+        )
+    } catch {
+        return $false
+    }
+}
+
 # --- Action: Verify ---
 function Verify-Shim {
     Write-Host "`n=== AGY-Shim Status Verification ===" -ForegroundColor Cyan
@@ -149,7 +177,13 @@ function Verify-Shim {
     Write-Host "    AGY_PATH              = $(if ($userAgyPath) { $userAgyPath } else { 'Not Set (Auto-detect)' })"
 
     # Verify agy.exe presence
-    $agyToTest = if ($sessAgyPath) { $sessAgyPath } else { $defaultAgyPath }
+    $agyToTest = if ($sessAgyPath) {
+        $sessAgyPath
+    } elseif ($userAgyPath) {
+        $userAgyPath
+    } else {
+        $defaultAgyPath
+    }
     if (Test-Path $agyToTest) {
         Write-Host "  Local agy.exe status  : Found at $agyToTest" -ForegroundColor Green
     } else {
@@ -176,9 +210,9 @@ function Verify-Shim {
             $labelPrefix = if ($cmdNames.Count -gt 1) { "    [$cmdName] " } else { "    " }
             
             if ($paths.Count -gt 0) {
-                $isShimFirst = $paths[0] -like "*AGY-Shim\bin\$p*"
+                $isShimFirst = Test-IsShimCommand $paths[0] $pBin
                 foreach ($path in $paths) {
-                    $color = if ($path -like "*AGY-Shim\bin\$p*") { "Cyan" } else { "DarkGray" }
+                    $color = if (Test-IsShimCommand $path $pBin) { "Cyan" } else { "DarkGray" }
                     Write-Host "${labelPrefix}-> $path" -ForegroundColor $color
                 }
                 if ($isShimFirst) {
@@ -192,7 +226,7 @@ function Verify-Shim {
                         Write-Host "${labelPrefix}-> Installed at $pCmd" -ForegroundColor Cyan
                         Write-Host "    Result ($cmdName): Pending (Registry updated - restart PowerShell / GUI host to update PATH)" -ForegroundColor Yellow
                     } else {
-                        Write-Host "    Result ($cmdName): Stale/Inactive (Genuine CLI takes precedence)" -ForegroundColor Yellow
+                        Write-Host "    Result ($cmdName): Shim not active (another CLI takes precedence)" -ForegroundColor Gray
                     }
                 }
             } else {
@@ -401,71 +435,131 @@ if ($Provider -eq "cursor") {
     }
 }
 
+$targetBinPath = Join-Path -Path $binPath -ChildPath $Provider
+$providerCommand = if ($Provider -eq "cursor") { "cursor" } else { $Provider }
+$providerExe = Join-Path -Path $targetBinPath -ChildPath "$providerCommand.exe"
+$providerCmd = Join-Path -Path $targetBinPath -ChildPath "$providerCommand.cmd"
+
+if (-not (Test-Path -LiteralPath $providerExe) -and -not (Test-Path -LiteralPath $providerCmd)) {
+    Write-Host "Installation aborted. No wrapper was found for '$Provider' in $targetBinPath." -ForegroundColor Red
+    exit 1
+}
+
+if (-not $AgyPath) {
+    $AgyPath = Get-EnvVar "AGY_PATH" "Session"
+}
+if (-not $AgyPath) {
+    $AgyPath = Get-EnvVar "AGY_PATH" "User"
+}
+if (-not $AgyPath) {
+    $AgyPath = $defaultAgyPath
+}
+$AgyPath = [Environment]::ExpandEnvironmentVariables($AgyPath)
+
+if (-not (Test-Path -LiteralPath $AgyPath -PathType Leaf)) {
+    Write-Host "Installation aborted. agy.exe was not found at: $AgyPath" -ForegroundColor Red
+    Write-Host "Install and authenticate Antigravity first, or pass -AgyPath <path>." -ForegroundColor Yellow
+    exit 1
+}
+$AgyPath = (Resolve-Path -LiteralPath $AgyPath).Path
+
+# Consent must be explicit and must happen before PATH or environment mutation.
+if (-not $Bypass) {
+    Write-Host "`n[Security Warning] Required Permission Bypass" -ForegroundColor Yellow
+    Write-Host "Antigravity runs prompts in a headless background process via this shim."
+    Write-Host "Because it cannot prompt you interactively to confirm permissions, enabling"
+    Write-Host "AGY_SHIM_ALLOW_BYPASS=1 is REQUIRED for prompt execution."
+    Write-Host "This allows agy.exe to run with --dangerously-skip-permissions."
+    Write-Host "For security implications, see README.md and docs/security-model.md."
+
+    $confirmBypass = Read-Host "Type Y to accept this risk and continue [N]"
+    if ($confirmBypass -cne "Y" -and $confirmBypass -cne "y") {
+        Write-Host "Installation cancelled. No environment changes were made." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 Write-Host "`nInstalling AGY-Shim..." -ForegroundColor Cyan
 Write-Host "  Target Provider wrapper: $Provider" -ForegroundColor White
 Write-Host "  Scope: $Scope (applying changes...)" -ForegroundColor White
+Write-Host "  Antigravity executable: $AgyPath" -ForegroundColor White
 
-$targetBinPath = Join-Path -Path $binPath -ChildPath $Provider
+$previousUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$previousSessionPath = $env:PATH
+$previousScopeAgyPath = Get-EnvVar "AGY_PATH" $Scope
+$previousScopeBypass = Get-EnvVar "AGY_SHIM_ALLOW_BYPASS" $Scope
+$previousSessionAgyPath = Get-EnvVar "AGY_PATH" "Session"
+$previousSessionBypass = Get-EnvVar "AGY_SHIM_ALLOW_BYPASS" "Session"
 
-# 1. Update PATH
-if ($Scope -eq "User") {
-    $oldPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if (-not $oldPath) { $oldPath = "" }
-    if ($oldPath -notlike "*$targetBinPath*") {
-        $newPath = "$targetBinPath;" + $oldPath.Trim(';')
-        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        Write-Host "  Prepend shim bin\$Provider directory to permanent User PATH." -ForegroundColor Green
-    } else {
-        Write-Host "  Shim bin\$Provider directory is already present in User PATH." -ForegroundColor Gray
+try {
+    # 1. Update PATH
+    if ($Scope -eq "User") {
+        $oldPath = if ($null -eq $previousUserPath) { "" } else { $previousUserPath }
+        $userPathParts = @($oldPath -split ";" | Where-Object { $_ })
+        if ($targetBinPath -notin $userPathParts) {
+            $newPath = (@($targetBinPath) + $userPathParts) -join ";"
+            [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+            Write-Host "  Prepended shim bin\$Provider directory to permanent User PATH." -ForegroundColor Green
+        } else {
+            Write-Host "  Shim bin\$Provider directory is already present in User PATH." -ForegroundColor Gray
+        }
     }
-    
-    # Also prepend to current session PATH so it is active immediately in this terminal
-    if ($env:PATH -notlike "*$targetBinPath*") {
-        $env:PATH = "$targetBinPath;" + $env:PATH
-        Write-Host "  Prepend shim bin\$Provider directory to current Session PATH." -ForegroundColor Green
-    }
-} else {
-    if ($env:PATH -notlike "*$targetBinPath*") {
-        $env:PATH = "$targetBinPath;" + $env:PATH
-        Write-Host "  Prepend shim bin\$Provider directory to current Session PATH." -ForegroundColor Green
+
+    $sessionPathParts = @($env:PATH -split ";" | Where-Object { $_ })
+    if ($targetBinPath -notin $sessionPathParts) {
+        $env:PATH = (@($targetBinPath) + $sessionPathParts) -join ";"
+        Write-Host "  Prepended shim bin\$Provider directory to current Session PATH." -ForegroundColor Green
     } else {
         Write-Host "  Shim bin\$Provider directory is already present in Session PATH." -ForegroundColor Gray
     }
-}
 
-# 2. Configure AGY_PATH
-Set-EnvVar "AGY_PATH" $defaultAgyPath $Scope
-if ($Scope -eq "User") {
-    Set-EnvVar "AGY_PATH" $defaultAgyPath "Session"
-}
-Write-Host "  Set AGY_PATH = $defaultAgyPath" -ForegroundColor Green
+    # 2. Configure AGY_PATH
+    Set-EnvVar "AGY_PATH" $AgyPath $Scope
+    if ($Scope -eq "User") {
+        Set-EnvVar "AGY_PATH" $AgyPath "Session"
+    }
+    Write-Host "  Set AGY_PATH = $AgyPath" -ForegroundColor Green
 
-# 3. Configure AGY_SHIM_ALLOW_BYPASS
-if ($Bypass) {
+    # 3. Configure the explicitly accepted bypass.
     Set-EnvVar "AGY_SHIM_ALLOW_BYPASS" "1" $Scope
     if ($Scope -eq "User") {
         Set-EnvVar "AGY_SHIM_ALLOW_BYPASS" "1" "Session"
     }
     Write-Host "  Set AGY_SHIM_ALLOW_BYPASS = 1 (Required for prompt execution)" -ForegroundColor Yellow
-} else {
-    Write-Host "`n[Security Warning] Required Permission Bypass" -ForegroundColor Yellow
-    Write-Host "Antigravity runs prompts in a headless background process via this shim."
-    Write-Host "Because it cannot prompt you interactively to confirm permissions, enabling"
-    Write-Host "the bypass flag (AGY_SHIM_ALLOW_BYPASS=1) is REQUIRED for the shim to function."
-    Write-Host "If declined, the shim will reject all prompt requests."
-    Write-Host "For security implications, see the README.md and docs/security-model.md."
-    
-    $confirmBypass = Read-Host "Enable AGY_SHIM_ALLOW_BYPASS? (Y/N) [Y]"
-    if ($confirmBypass -eq "N" -or $confirmBypass -eq "n") {
-        Write-Host "Installation aborted. The shim cannot function without permission bypass." -ForegroundColor Red
-        exit 1
-    } else {
-        Set-EnvVar "AGY_SHIM_ALLOW_BYPASS" "1" $Scope
-        if ($Scope -eq "User") {
-            Set-EnvVar "AGY_SHIM_ALLOW_BYPASS" "1" "Session"
-        }
-        Write-Host "  Set AGY_SHIM_ALLOW_BYPASS = 1 (Bypass enabled)" -ForegroundColor Yellow
+
+} catch {
+    Write-Host "Installation failed. Restoring the previous environment configuration..." -ForegroundColor Red
+    if ($Scope -eq "User") {
+        [Environment]::SetEnvironmentVariable("Path", $previousUserPath, "User")
     }
+    $env:PATH = $previousSessionPath
+
+    if ($null -eq $previousScopeAgyPath) {
+        Remove-EnvVar "AGY_PATH" $Scope
+    } else {
+        Set-EnvVar "AGY_PATH" $previousScopeAgyPath $Scope
+    }
+    if ($null -eq $previousScopeBypass) {
+        Remove-EnvVar "AGY_SHIM_ALLOW_BYPASS" $Scope
+    } else {
+        Set-EnvVar "AGY_SHIM_ALLOW_BYPASS" $previousScopeBypass $Scope
+    }
+
+    if ($Scope -eq "User") {
+        if ($null -eq $previousSessionAgyPath) {
+            Remove-EnvVar "AGY_PATH" "Session"
+        } else {
+            Set-EnvVar "AGY_PATH" $previousSessionAgyPath "Session"
+        }
+        if ($null -eq $previousSessionBypass) {
+            Remove-EnvVar "AGY_SHIM_ALLOW_BYPASS" "Session"
+        } else {
+            Set-EnvVar "AGY_SHIM_ALLOW_BYPASS" $previousSessionBypass "Session"
+        }
+    }
+
+    Write-Error $_
+    exit 1
 }
 
 Verify-Shim
