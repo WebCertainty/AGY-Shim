@@ -2,6 +2,27 @@
 
 All notable changes to this project are recorded here.
 
+## v0.2.1 - Installation documentation corrections
+
+### Bug Fixes
+
+- Removed the unnecessary `pip install .` step from normal installation
+  instructions. Provider launchers execute the Python source directly from the
+  cloned repository, which must remain in its configured location.
+- Added CMD-first instructions that explicitly choose an existing permanent
+  installation folder before cloning.
+- Made Gemini the default provider throughout installation, verification,
+  troubleshooting, testing, and Clairvoyance agent examples.
+- Linked Graphify to its upstream repository and added the pinned optional
+  installation commands validated by this project.
+
+### Documentation
+
+- Clarified that Python package installation is needed only for optional
+  developer tests.
+- Corrected safe-mode source invocation to run
+  `src\agy_shim\main.py` directly from the checkout.
+
 ## v0.2.0 - Stability, isolation, and security hardening
 
 ### Features
