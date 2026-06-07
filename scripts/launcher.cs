@@ -106,12 +106,14 @@ class Program {
 
         proc.WaitForExit();
         
-        // Wait a bit for threads to finish flushing
+        // Ensure all output and error data are completely flushed to console
+        outputThread.Join();
+        errorThread.Join();
         inputThread.Join(100);
-        outputThread.Join(100);
-        errorThread.Join(100);
         
-        return proc.ExitCode;
+        int exitCode = proc.ExitCode;
+        proc.Dispose();
+        return exitCode;
     }
 
     static string EscapeArg(string arg) {

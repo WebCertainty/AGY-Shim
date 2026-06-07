@@ -7,7 +7,7 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
 
-from agy_shim.main import escape_plain_text_backslashes
+from agy_shim.main import escape_plain_text_backslashes, get_stable_raw_text
 
 class TestEscapeBackslashes(unittest.TestCase):
     def test_basic_path_escaping(self):
@@ -73,6 +73,28 @@ class TestEscapeBackslashes(unittest.TestCase):
         inp = "Check this path: D:\\CODE-REPO\\.git\\index.lock and also `code \\. block` then other path D:\\CODE-REPO\\.git\\index.lock"
         expected = "Check this path: D:\\CODE-REPO\\\\.git\\index.lock and also `code \\. block` then other path D:\\CODE-REPO\\\\.git\\index.lock"
         self.assertEqual(escape_plain_text_backslashes(inp), expected)
+
+    def test_escaped_backtick_no_inline_state(self):
+        # Escaped backticks/tildes should not trigger inline-code escaping-bypass state
+        inp = "Some escaped backtick: \\` then path D:\\CODE-REPO\\.git\\index.lock"
+        expected = "Some escaped backtick: \\\\` then path D:\\CODE-REPO\\\\.git\\index.lock"
+        self.assertEqual(escape_plain_text_backslashes(inp), expected)
+
+    def test_stable_raw_text(self):
+        # Trailing backslash is unstable
+        self.assertEqual(get_stable_raw_text("D:\\"), ("D:", "\\"))
+        # Trailing odd underscore is unstable
+        self.assertEqual(get_stable_raw_text("some_"), ("some", "_"))
+        self.assertEqual(get_stable_raw_text("some__"), ("some__", ""))
+        self.assertEqual(get_stable_raw_text("some___"), ("some__", "_"))
+        # Trailing odd/short backtick is unstable
+        self.assertEqual(get_stable_raw_text("code`"), ("code", "`"))
+        self.assertEqual(get_stable_raw_text("code``"), ("code", "``"))
+        self.assertEqual(get_stable_raw_text("code```"), ("code```", ""))
+        # Trailing odd/short tilde is unstable
+        self.assertEqual(get_stable_raw_text("code~"), ("code", "~"))
+        self.assertEqual(get_stable_raw_text("code~~"), ("code", "~~"))
+        self.assertEqual(get_stable_raw_text("code~~~"), ("code~~~", ""))
 
 if __name__ == "__main__":
     unittest.main()

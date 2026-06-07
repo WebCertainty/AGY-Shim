@@ -257,6 +257,7 @@ if ($Action -eq "Uninstall") {
     # 1. Clean Path
     if ($Scope -eq "User") {
         $oldPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if (-not $oldPath) { $oldPath = "" }
         $pathParts = $oldPath -split ";"
         $filteredParts = $pathParts | Where-Object {
             $path = $_.Trim()
@@ -409,6 +410,7 @@ $targetBinPath = Join-Path -Path $binPath -ChildPath $Provider
 # 1. Update PATH
 if ($Scope -eq "User") {
     $oldPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (-not $oldPath) { $oldPath = "" }
     if ($oldPath -notlike "*$targetBinPath*") {
         $newPath = "$targetBinPath;" + $oldPath.Trim(';')
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")

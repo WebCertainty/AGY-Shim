@@ -205,6 +205,53 @@ def write_message(msg_dict):
     except Exception as e:
         log_event("message_write_failed", error=error_category(e))
 
+def get_stable_raw_text(raw_text):
+    # Returns (stable_raw, unstable_raw)
+    n = len(raw_text)
+    if n == 0:
+        return "", ""
+        
+    # Check for trailing backslash
+    if raw_text[-1] == '\\':
+        return raw_text[:-1], '\\'
+        
+    # Check for trailing underscores (odd count is unstable)
+    if raw_text[-1] == '_':
+        count = 0
+        for char in reversed(raw_text):
+            if char == '_':
+                count += 1
+            else:
+                break
+        if count % 2 != 0:
+            return raw_text[:-1], '_'
+            
+    # Check for trailing backticks (1 or 2 are unstable)
+    if raw_text[-1] == '`':
+        backtick_count = 0
+        for char in reversed(raw_text):
+            if char == '`':
+                backtick_count += 1
+            else:
+                break
+        if backtick_count % 3 != 0:
+            unstable_len = backtick_count % 3
+            return raw_text[:-unstable_len], raw_text[-unstable_len:]
+            
+    # Check for trailing tildes (1 or 2 are unstable)
+    if raw_text[-1] == '~':
+        tilde_count = 0
+        for char in reversed(raw_text):
+            if char == '~':
+                tilde_count += 1
+            else:
+                break
+        if tilde_count % 3 != 0:
+            unstable_len = tilde_count % 3
+            return raw_text[:-unstable_len], raw_text[-unstable_len:]
+            
+    return raw_text, ""
+
 def escape_plain_text_backslashes(text):
     result = []
     i = 0
@@ -262,10 +309,15 @@ def escape_plain_text_backslashes(text):
             if text[i] == '\\':
                 # Check lookahead for punctuation character
                 if i + 1 < n and text[i+1] in '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~':
-                    result.append('\\\\')
+                    if text[i+1] in '`~':
+                        result.append('\\\\' + text[i+1])
+                        i += 2
+                    else:
+                        result.append('\\\\')
+                        i += 1
                 else:
                     result.append('\\')
-                i += 1
+                    i += 1
             elif text[i:i+2] == '__':
                 # Escape double underscores to prevent markdown bold rendering
                 result.append(r'\_\_')
@@ -592,19 +644,26 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
         step=initial_last_idx,
     )
     
-    sent_text = ""
+    sent_text_raw = ""
     max_idx_seen = initial_last_idx
     
-    def check_and_send():
-        nonlocal sent_text, max_idx_seen
+    def check_and_send(is_final=False):
+        nonlocal sent_text_raw, max_idx_seen
         try:
             res = read_response_from_db(conversations_dir, conv_id, initial_last_idx)
             if res:
-                text, max_idx = res
-                text = escape_plain_text_backslashes(text)
+                text_raw, max_idx = res
                 max_idx_seen = max(max_idx_seen, max_idx)
-                if text.startswith(sent_text):
-                    delta = text[len(sent_text):]
+                
+                if is_final:
+                    stable_raw = text_raw
+                else:
+                    stable_raw, _ = get_stable_raw_text(text_raw)
+                    
+                if stable_raw.startswith(sent_text_raw):
+                    escaped_sent = escape_plain_text_backslashes(sent_text_raw)
+                    escaped_stable = escape_plain_text_backslashes(stable_raw)
+                    delta = escaped_stable[len(escaped_sent):]
                     if delta:
                         log_event(
                             "response_delta_sent",
@@ -612,11 +671,17 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
                             step=max_idx,
                         )
                         send_update_notification(session_id, delta)
-                        sent_text = text
+                        sent_text_raw = stable_raw
                 else:
                     log_event("response_text_mismatch")
-                    send_update_notification(session_id, text)
-                    sent_text = text
+                    escaped_text = escape_plain_text_backslashes(text_raw)
+                    escaped_sent = escape_plain_text_backslashes(sent_text_raw)
+                    if escaped_text.startswith(escaped_sent):
+                        delta = escaped_text[len(escaped_sent):]
+                        send_update_notification(session_id, delta)
+                    else:
+                        send_update_notification(session_id, escaped_text)
+                    sent_text_raw = text_raw
         except Exception as ex:
             log_event(
                 "database_poll_iteration_failed",
@@ -626,11 +691,11 @@ def poll_db_loop(session_id, conversations_dir, holder, stop_event):
                 
     try:
         while not stop_event.is_set():
-            check_and_send()
+            check_and_send(is_final=False)
             time.sleep(0.2)
             
         # Do one last check before exiting
-        check_and_send()
+        check_and_send(is_final=True)
         holder.set_last_step_idx(max_idx_seen)
     except Exception as e:
         log_event("database_poll_failed", error=error_category(e))
@@ -1015,6 +1080,14 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                         proc_to_kill.wait(timeout=1.0)
                 except Exception as e:
                     log_event("subprocess_cleanup_failed", error=error_category(e))
+                try:
+                    proc_to_kill.stdout.close()
+                except:
+                    pass
+                try:
+                    proc_to_kill.stderr.close()
+                except:
+                    pass
         stop_event.set()
         if poll_thread.is_alive():
             poll_thread.join(timeout=2.0)
