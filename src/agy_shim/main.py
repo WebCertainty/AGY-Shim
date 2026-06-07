@@ -1126,37 +1126,8 @@ def handle_prompt(req_id, params, session_store, conversations_dir):
                     "message": err_msg
                 }
             }
-            
-            if final_last_step_idx <= last_step_idx:
-                err_msg = check_agy_logs_for_error(conversations_dir)
-                if err_msg:
-                    log_event("agy_error_detected")
-                    send_update_notification(session_id, err_msg)
-                    return {
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "error": {
-                            "code": -32000,
-                            "message": err_msg
-                        }
-                    }
-                else:
-                    stdout_text = "".join(stdout_lines).strip()
-                    if stdout_text:
-                        stdout_text = escape_plain_text_backslashes(stdout_text)
-                        send_update_notification(session_id, stdout_text)
-                    else:
-                        err_msg = "Error: The agent completed the turn but produced no output. Please check the local agy logs."
-                        send_update_notification(session_id, err_msg)
-                        return {
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {
-                                "code": -32000,
-                                "message": err_msg
-                            }
-                        }
-        else:
+
+        if final_last_step_idx <= last_step_idx:
             stdout_text = "".join(stdout_lines).strip()
             if stdout_text:
                 stdout_text = escape_plain_text_backslashes(stdout_text)
